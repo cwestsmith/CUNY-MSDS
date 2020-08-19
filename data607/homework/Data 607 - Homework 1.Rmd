@@ -1,0 +1,46 @@
+---
+title: "Data 607 - Homework 1"
+author: "cwestsmith"
+date: "8/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview ##
+For this assignment I used a data set from fivethirtyeight focused on the concern of Americans on COVID-19 infections as well as the economy.  Although only one dataset was used for this assignment, serveral were included on the website.  The article and data can be found at [this link](https://projects.fivethirtyeight.com/coronavirus-polls/).
+
+## Code and Comments ##
+
+### Data Frame Creation Based on File in Github ###
+The data is uploaded to a personal Github repository, which is downloaded and input into a data frame.  From there the 'head' and 'str' functions are used to view key attributes of the data frame and ensure it loaded correctly.
+
+```{R}
+df_orig <- read.csv("https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/covid_concern_toplines.csv", header = TRUE)
+head(df_orig, n = 5L)
+str(df_orig)
+```
+
+### Creation of New Data Frame Subset of Original Columns ###
+A new data frame is created containing a subset of the columns in the original source.  I referred to column names rather than numbers as I find it easier for readability.  If using a higher number columns I would have opted for numbers though from a practical perspective.
+
+```{R}
+df_new1 <- df_orig[, c("subject","modeldate","very_estimate","somewhat_estimate","not_very_estimate","not_at_all_estimate")]
+```
+
+### Rename Column ###
+The 'modeldate' column name is replaced with 'model_date' for consistency with the other column names and improved readability.  'Head' is used to verify the change.
+
+```{R}
+colnames(df_new1)[colnames(df_new1) %in% c("modeldate")] <- c("model_date")
+head(df_new1, n = 5L)
+```
+
+## Conclusions and Recommendations ##
+In general concerns of COVID-19 infections have been increasing over the last few months while concerns about the economy are remaining somewhat the same.  It would be interesting to delve a bit deeper into the data and specific events associated with the months or days to determine what if any relationship there has been between global or national events (protests, stimulus payments, political speeches, etc...) and this survey data.
+
+
+
+
