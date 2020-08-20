@@ -10,9 +10,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Overview ##
-For this assignment I used a data set from fivethirtyeight focused on the concern of Americans on COVID-19 infections as well as the economy.  Although only one dataset was used for this assignment, serveral were included on the website.  The article and data can be found at [this link](https://projects.fivethirtyeight.com/coronavirus-polls/).
+For this assignment I used a data set from fivethirtyeight focused on the concern of Americans on COVID-19 infections as well as on its impact on the economy.  Although only one dataset was used for this assignment, serveral were included on the website.  The article and data can be found at [this link](https://projects.fivethirtyeight.com/coronavirus-polls/).
 
 ## Code and Comments ##
+
+### Load Libraries ###
+If the libraries are not installed, use the install.packages("package_name") function.
+
+```{R}
+library(ggplot2)
+library(stringr)
+```
 
 ### Data Frame Creation Based on File in Github ###
 The data is uploaded to a personal Github repository, which is downloaded and input into a data frame.  From there the 'head' and 'str' functions are used to view key attributes of the data frame and ensure it loaded correctly.
@@ -23,23 +31,52 @@ head(df_orig, n = 5L)
 str(df_orig)
 ```
 
-### Creation of New Data Frame Subset of Original Columns ###
-A new data frame is created containing a subset of the columns in the original source.  I referred to column names rather than numbers as I find it easier for readability.  If using a higher number columns I would have opted for numbers though from a practical perspective.
+### Creation of New Data Frame Including Subset of Original Columns ###
+A new data frame is created containing a subset of the columns in the original source.  In addition, two new columns are added which consolidate the various columns into total figures for "concerned" and "not concerned".  I referred to column names rather than numbers as I find it easier for readability.  If using a higher number columns I would have opted for numbers though from a practical perspective.
 
 ```{R}
 df_new1 <- df_orig[, c("subject","modeldate","very_estimate","somewhat_estimate","not_very_estimate","not_at_all_estimate")]
+df_new1$total_concerned <- df_new1$very_estimate + df_new1$somewhat_estimate
+df_new1$total_not_concerned <- df_new1$not_very_estimate + df_new1$not_at_all_estimate
 ```
 
 ### Rename Column ###
-The 'modeldate' column name is replaced with 'model_date' for consistency with the other column names and improved readability.  'Head' is used to verify the change.
+The 'modeldate' column name is replaced with 'model_date' for consistency with the other column names and improved readability.  'Colnames' is used to verify the change.
 
 ```{R}
 colnames(df_new1)[colnames(df_new1) %in% c("modeldate")] <- c("model_date")
-head(df_new1, n = 5L)
+colnames(df_new1)
+```
+
+### Convert Character Column to Date Column
+The values were in two different formats (using '-' and '/' depending on the row).  For the 'as.Date' function to properly work they first needed to be harmonized.  The 'class' and 'head' functions were used to verify that the column was converted properly.
+
+```{R}
+df_new1$model_date <- str_replace_all(df_new1$model_date, '-', '/')
+df_new1$model_date <- as.Date(df_new1$model_date, format="%m/%d/%Y")
+class(df_new1$model_date)
+head(df_new1$model_date, n = 5L)
+```
+
+### Plot % of Americans Concerned and Not Concerned Over Time
+
+```{R}
+ggplot(data=df_new1, aes(x = model_date, y = total_concerned, group = subject, color = subject)) +
+  scale_x_date(limits = as.Date(c("2020-02-01","2020-8-31"))) +
+  ggtitle("% Americans Concerned Over Time")+
+  ylab('% Concerned')+xlab('Date') +
+  geom_line()
+
+ggplot(data=df_new1, aes(x = model_date, y = total_not_concerned, group = subject, color = subject)) +
+  scale_x_date(limits = as.Date(c("2020-02-01","2020-8-31"))) +
+  ggtitle("% Americans Not Concerned Over Time")+
+  ylab('% Not Concerned')+xlab('Date') +
+  geom_line()
 ```
 
 ## Conclusions and Recommendations ##
-In general concerns of COVID-19 infections have been increasing over the last few months while concerns about the economy are remaining somewhat the same.  It would be interesting to delve a bit deeper into the data and specific events associated with the months or days to determine what if any relationship there has been between global or national events (protests, stimulus payments, political speeches, etc...) and this survey data.
+
+Of those surveyed, significantly more Americans are concerned about the effects of the pandemic on the economy than on being infected.  Concern for both categories fell significantly in June but have been steadily rising again since then.  It would be interesting to delve a bit deeper into the data and specific events associated with spikes and dips to determine what if any relationship there has been between global or national events (protests, stimulus payments, political speeches, etc...) and the survey data.
 
 
 
