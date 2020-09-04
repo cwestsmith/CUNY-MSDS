@@ -1,0 +1,31 @@
+respondent,movie_name,date,rating
+User 1,The Gentlemen,03-Sep-20,2
+User 1,Ordinary Love,03-Sep-20,3
+User 1,The Invisible Man,03-Sep-20,2
+User 1,Bad Boys for Life,03-Sep-20,3
+User 1,Onward,03-Sep-20,
+User 2,The Gentlemen,03-Sep-20,2
+User 2,Ordinary Love,03-Sep-20,1
+User 2,The Invisible Man,03-Sep-20,1
+User 2,Bad Boys for Life,03-Sep-20,3
+User 2,Onward,03-Sep-20,4
+User 3,The Gentlemen,03-Sep-20,1
+User 3,Ordinary Love,03-Sep-20,
+User 3,The Invisible Man,03-Sep-20,2
+User 3,Bad Boys for Life,03-Sep-20,5
+User 3,Onward,03-Sep-20,4
+User 4,The Gentlemen,03-Sep-20,4
+User 4,Ordinary Love,03-Sep-20,
+User 4,The Invisible Man,03-Sep-20,
+User 4,Bad Boys for Life,03-Sep-20,2
+User 4,Onward,03-Sep-20,5
+User 5,The Gentlemen,03-Sep-20,2
+User 5,Ordinary Love,03-Sep-20,3
+User 5,The Invisible Man,03-Sep-20,2
+User 5,Bad Boys for Life,03-Sep-20,3
+User 5,Onward,03-Sep-20,5
+User 6,The Gentlemen,03-Sep-20,1
+User 6,Ordinary Love,03-Sep-20,2
+User 6,The Invisible Man,03-Sep-20,2
+User 6,Bad Boys for Life,03-Sep-20,3
+User 6,Onward,03-Sep-20,5
