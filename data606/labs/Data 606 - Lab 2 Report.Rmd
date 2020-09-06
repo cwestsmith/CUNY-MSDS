@@ -1,0 +1,140 @@
+---
+title: "Data 606 - Lab 2"
+author: "Cameron Smith"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r load-packages and data, message=FALSE}
+library(tidyverse)
+library(openintro)
+data(nycflights)
+```
+
+### Exercise 1
+
+The three histograms each show a different level of detail / granularity for the data.  The most detailed of the options is the one using "binwidth=15", which reveals an interesting insight - the vast majority of flight delays are within the -15 to 15 minute range, with many flights actually arriving early (supported by the negative median of -1).  This insight is obscured by the "binwidth=150" option.
+
+```{r LAX summary stats}
+lax_flights <- nycflights %>%
+  filter(dest == "LAX")
+lax_flights %>%
+  summarise(mean_dd = mean(dep_delay),
+            median_dd = median(dep_delay),
+            n = n())
+```
+
+
+```{r departure delays histogram}
+ggplot(data = nycflights, aes(x = dep_delay)) +
+  geom_histogram(binwidth=15)
+```
+
+
+### Exercise 2
+
+68 flights meet the criteria of (1) headed to SFO; and (2) in February.
+
+```{r feb SFO delays filter}
+# Create the data frame based on filtered values and then view key info
+sfo_feb_arrivals <- nycflights %>% filter(dest == 'SFO', month == 2)
+nrow(sfo_feb_arrivals)
+```
+### Exercise 3
+
+Using a bincount of 15, the distribution of the arrival delays is bimodial and right skewed (values ranging from -66 to 196), with the majority of delays having negative values, i.e. the majority of arrivals were *early*.  Many of the values fall near the mean and median of -4.5 and -11, respectively, and most fall within one standard deviation of the mean which is 36.28.
+
+```{r summary stats SFO arrival delays}
+sfo_feb_arrivals %>%
+  summarise(mean_sfo = mean(arr_delay),
+            median_sfo = median(arr_delay),
+            std_sfo = sd(arr_delay),
+            min_sfo = min(arr_delay),
+            max_sfo = max(arr_delay),
+            n = n())
+```
+
+```{r histogram Feb SFO arrival delays}
+ggplot(data = nycflights, aes(x = arr_delay)) +
+  geom_histogram(binwidth=15)
+
+```
+
+### Exercise 4
+
+The carrier with the most variable arrival delays to SFO is United Airlines.
+
+```{r summary stats: SFO arrivals grouped by carrier}
+sfo_feb_arrivals %>%
+  group_by(carrier) %>%
+  summarise(median_sfo = median(arr_delay),
+            iqr_sfo = IQR(arr_delay),
+            min(arr_delay),
+            max(arr_delay),
+            sd(arr_delay),
+            n = n())
+```
+
+### Exercise 5 
+
+The pro of using the lowest mean to plan travel leaving NYC that minimizes potential departure delays is that it is a simple metric which takes into account all data points.  The con is that it is affected by extreme observations (i.e. outliers), which in this case we do have.  The median on the other hand can be a good metric to use because it is not affected by outliers.  This is also the converse however as it is missing the full picture.  In this case, using the data below, we can see that the media is the more helpul of the metrics due to the skewed distribution of the data:
+
+```{r NYC delays by month}
+nycflights %>%
+  group_by(month) %>%
+  summarise(mean_dd = mean(dep_delay), median_dd = median(dep_delay)) %>%
+  arrange(desc(mean_dd))
+```
+
+### Exercise 6
+
+The NYC airport I would fly out of is LGA as it has the highest on time departure rate of the NYC airports.
+
+```{r on time departure rates}
+nycflights <- nycflights %>%
+  mutate(dep_type = ifelse(dep_delay < 5, "on time", "delayed"))
+nycflights %>%
+  group_by(origin) %>%
+  summarise(ot_dep_rate = sum(dep_type == "on time") / n()) %>%
+  arrange(desc(ot_dep_rate))
+```
+
+### Exercise 7
+
+The average speed variable can be added to the dataframe as follows:
+
+```{r mutation: avg speed}
+nycflights <- nycflights %>%
+  mutate(avg_speed = distance / (air_time / 60))
+# Verify transformation by viewing first few rows
+head(select(nycflights, flight, avg_speed))
+```
+
+### Exercise 8
+
+There appears to be a positive non-linear relationship between the two variables, with increased distance corresponding to increased speed.
+
+```{r scatterplot avg speed vs dist}
+ggplot(nycflights, aes(x = avg_speed, y = distance)) +
+  geom_point(shape=1)
+```
+
+### Exercise 9
+
+Based on the below plot it appears that the (rough) cutoff point for departure delays where you can still expect to get to your destination on time is 45 minutes.
+
+```{r replication of scatter plot}
+filtered_airlines <- nycflights %>%
+  filter(carrier == "AA" | carrier == "DL" | carrier == "UA")
+  
+filtered_airlines %>% ggplot(aes(x = dep_delay, y = arr_delay, color = carrier)) +
+  geom_point(shape=16)
+```
+
+**End of lab report**
+
+
