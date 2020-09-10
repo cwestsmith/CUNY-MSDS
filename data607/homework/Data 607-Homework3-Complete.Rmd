@@ -16,7 +16,8 @@ library(stringr)
 
 *Using the 173 majors listed in fivethirtyeight.com’s College Majors dataset [https://fivethirtyeight.com/features/the-economic-guide-to-picking-a-college-major/], provide code that identifies the majors that contain either "DATA" or "STATISTICS"*
 
-The below code loads the data from fivethirtyeight's Github repository.
+The below code loads data driectly from fivethirtyeight's Github repository.  For redundancy a backup file is located in my Github at the following link:
+[https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/majors-list.csv]
 
 ```{r load and filter college data}
 # Load data
