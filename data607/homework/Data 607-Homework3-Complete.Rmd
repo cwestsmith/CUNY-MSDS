@@ -1,8 +1,9 @@
 ---
 title: "Data 607 - Homework 3"
-author: "C Westsmith"
+author: "Cameron Smith"
 date: "`r Sys.Date()`"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 always_allow_html: yes
