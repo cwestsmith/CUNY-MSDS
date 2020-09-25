@@ -1,0 +1,139 @@
+---
+title: "Data 607 - Homework 5"
+author: "Cameron Smith"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+```
+
+# Introduction
+
+This assignment is focused on tidying data via the various tools within the Tidyverse package.  The key verbs of the tidying process are: mutate, select, filter, summarise and arrange.  For practice I have used each of them below to tidy a set of data focused on flight statistics.
+
+### Load data from Github
+
+```{r, message=FALSE}
+df_untidy <- read.csv("https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/flightdata_untidy.csv", header = TRUE)
+head(df_untidy, 4)
+```
+
+### Start the tidying process
+
+Melting the data, going from wide to long
+
+```{r, message=FALSE}
+# Using the gather function to consolidates similar columns
+df_tidier <- gather(df_untidy, City, Total_Flights, Los.Angeles, Phoenix, San.Diego, San.Francisco, Seattle)
+head(df_tidier, 4)
+```
+
+### More tidying up
+
+Separating out the on time and delayed flight counts to unique columns, enabling a wider format again (as suggested in the grading rubric).
+
+```{r, message = FALSE}
+df_tidiest <- df_tidier %>%
+  mutate(ontime_flights = ifelse(Timeliness == "on time", Total_Flights, 0))
+
+df_tidiest <- df_tidiest %>%
+  mutate(delayed_flights = ifelse(Timeliness == "delayed", Total_Flights, 0))
+
+# Using select to keep only the relevant columns (excluding "Timeliness" which has been replaced with separate columns)
+df_tidiest <- df_tidiest %>%
+  select(Airline, City, ontime_flights, delayed_flights)
+
+# Have a look at the first 4 rows of the new data frame to make sure everything looks ok
+head(df_tidiest, 4)
+```
+
+### Last steps
+
+Consolidate the rows with duplicate entries and prepare it for analysis via the group by and summarize functions.
+
+```{r, message=FALSE}
+df_tidiest %>%
+  group_by(Airline, City) %>%
+  summarise_all(sum)
+```
+
+### Analysis -  Arrival Delays
+
+Analyzing arrival delays for the two airlines via two different charts.  This view conveys a perception that AM West is a much less reliable airline, which further down in this analysis we realize is not entirely correct.
+
+```{r, message=FALSE}
+
+# Chart comparing # of delayed flights
+df_tidiest %>% 
+  ggplot(aes(x = Airline, y = delayed_flights, fill=City)) +
+  geom_bar(position = "dodge", stat="identity") +
+  ggtitle("Number of delayed flights per destination by airline")
+
+```
+
+### Analysis -  Arrivals On Time
+
+Analyzing on time arrivals, but rather than using a simple # of flights metric for the comparison I have compared the data on a percentage basis, which offers enhanced / better insight for this context.
+
+```{r, message=FALSE}
+
+# Summarize data including metric of on time percentage by airline and city
+ontime_info <- df_tidiest %>%
+  group_by(Airline, City) %>%
+  summarise(
+    ontime_percentage = round(sum(ontime_flights / sum(ontime_flights + delayed_flights)),2),
+    delayed_percentage = 1 - ontime_percentage)
+
+# Chart comparing on time percentage by airline and city
+ontime_info %>% 
+  ggplot(aes(x = Airline, y = ontime_percentage, fill=City)) +
+  geom_bar(position = "dodge", stat="identity") +
+  geom_text(aes(label = ontime_percentage), position = position_dodge(width=0.9), vjust=1.2) +
+  ggtitle("Percentage of on time flights per destination by airline")
+
+# Same data but in summary form
+ontime_info
+
+```
+
+
+
+# Conclusion
+
+AM West has many more delays in total, but that is mainly due to the fact that they have many more flights in total, in particular to Phoenix.  Due to this fact Phoenix appears deceivingly as an unreliable AM West destination from a timeliness perspective.  Though this is true when compared purely on a # of flights basis, when instead compared on a percentage flights basis we see that the difference is in fact minimal - 95% of flights to Phoenix are on time for Alaska and 92% for AM West.  
+
+Interestingly Alaska's on time percentages are on a per destination basis higher than AM West, but AM West has a slightly higher on time percentage when averaging all destinations - 92% compared to 87%.  This difference is again due to the number of flights.  AM West tends to be more timely when flying to destinations they do not fly to very often, versus Alaska which is the inverse.
+
+In fact, Alaska's overall on time percentage (average of all destinations) is 87% compared to 89% for AM West - the conclusion being that AM West is actually the (slightly) more reliable airline.
+
+```{r, message=FALSE}
+ontime_info_2 <- df_tidiest %>%
+  group_by(Airline, City) %>%
+  summarise(
+    total_flights = sum(ontime_flights + delayed_flights),
+    ontime_percentage = round(sum(ontime_flights / sum(ontime_flights + delayed_flights)),2),
+    delayed_percentage = 1 - ontime_percentage)
+
+# Chart illustrating how Alaska has higher on time rates per city but a lower average on time rate compared to AM West
+ontime_info_2 %>% 
+  ggplot(aes(x = Airline, y = total_flights, fill=City)) +
+  geom_bar(position = "dodge", stat="identity") +
+  geom_text(aes(label = ontime_percentage), position = position_dodge(width=0.9), vjust=1.2) +
+  ggtitle("Total number of flights per destination by airline, and percentage of on time flights")
+
+
+# Percentage of all flights
+ontime_info_3 <- df_tidiest %>%
+  group_by(Airline) %>%
+  summarise(
+    total_flights = sum(ontime_flights + delayed_flights),
+    ontime_percentage = round(sum(ontime_flights / sum(ontime_flights + delayed_flights)),2),
+    delayed_percentage = 1 - ontime_percentage)
+
+ontime_info_3
+
+```
