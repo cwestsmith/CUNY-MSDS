@@ -1,0 +1,619 @@
+---
+title: "Data 606 - Project 2"
+author: "Cameron Smith"
+date: "9/30/2020"
+output:
+  html_document:
+    highlight: pygments
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# Introduction and Approach
+
+For this project we were asked to choose three "wide" datasets, create .CSV (or alternatively databases) for them, then tidy and analyze the data.  I partnered with two others from Data 607 for this project - Karim Hammoud and Jack Write.  Our methodology was to each take one dataset to work on and then share the code and discussions questions / challenges with the rest of the group, the hopeful outcome being higher quality work based on feedback from all in the group.
+
+## Dataset 1: Global Food and Feed Production Analysis, by Cameron
+
+### Proposed Analysis
+
+The key questions that were proposed to answer are:
+
+(1) For a specific country see its current top 3 production items and whether they have changed since 1961 \n
+(2) Determine whether feed has overtaken food in any areas or food items \n
+
+(3) Compare a high protein crop like a legume to an animal-based product and determine whether they have increased or decreased over time. \n
+
+### Data
+The data set I chose to work with is the Food and Agricultural Organization (FAO) data on worldwide food (for human consumption and feed (for animal consumption) production and distribution, as hosted on Kaggle.  It is a very wide data set with 63 columns in total.
+
+Formal citation for data set:
+
+Oppenheim, R.  (2017; November).  Who eats the food we grow?, Version 7.  Retrieved 30 September 2020 from https://www.kaggle.com/dorbicycle/world-foodfeed-production/version/7.
+
+```{r}
+# Load required packages
+library(tidyverse)
+library(gridExtra)
+
+# Load data from Github
+rawdata <- read.csv("https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/FAO.csv")
+
+# Quick look at the data to make sure it loaded correctly.  It consists of 63 columns and 21,477 rows at this point.
+glimpse(rawdata)
+```
+### Tidy and Transform
+
+To enhance our ability to analyze the data within the Tidyverse we need to do some tidying and transforming.  This increases the number of rows from 21,477 to 1,138,281, so the benefit of enhanced analysis comes at a cost of CPU performance.
+```{r}
+# Combine the year columns into key-pair columns indicating year and units.
+longdata_cs <- rawdata %>% 
+  pivot_longer(Y1961:Y2013, names_to = "Year", values_to = "Total_Units")
+
+# Pivot the food and feed columns for a wider format.
+longdata_cs <- longdata_cs %>% 
+  pivot_wider(names_from = Element, values_from = Total_Units, values_fill = 0)
+
+# Remove the Y in from the values in the year column and convert to number.
+longdata_cs <- longdata_cs %>% mutate(Year=as.numeric(gsub("Y","", Year)))
+
+# Confirm everything looks ok
+str(longdata_cs)
+
+# Create new data frame including only the columns required for analysis and
+# use group_by to consolidate similar rows
+analysisdata <- longdata_cs %>% 
+  select(Area, Year, Item, Feed, Food) %>%
+  group_by(Area, Year, Item) %>%
+  summarize(Feed_Units=sum(Feed), Food_Units=sum(Food), Total_Units=sum(Feed+Food))
+
+# Make sure everything looks as intended 
+head(analysisdata, 10)
+
+```
+
+### Analysis
+
+Now that the data is tidied it can be analyzed.  We can see here that in 1961 the top producers were U.S., China, and India (in that order), but in 2013 the order has shifted: China, India, and U.S.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# View top countries by Total_Units by earliest year (1961)
+analysisdata %>% ungroup() %>%
+  filter(Year == min(Year)) %>%
+  select(Year, Area, Total_Units) %>%
+  group_by(Year, Area) %>%
+  summarize(Total_Units = sum(Total_Units)) %>%
+  arrange(desc(Total_Units))
+
+# View top countries by Total_Units by latest year (2013)
+analysisdata %>% ungroup() %>%
+  filter(Year == max(Year)) %>%
+  select(Year, Area, Total_Units) %>%
+  group_by(Year, Area) %>%
+  summarize(Total_Units = sum(Total_Units)) %>%
+  arrange(desc(Total_Units))
+
+```
+
+
+**Question 1**
+
+*For a specific country see its current top 3 production items and whether they have changed since 1961*
+
+We can see that yes the items have changed from 1961 to 2013 (the latest year of data).  
+
+In 1961 the items were (1) Milk - Excluding Butter; (2) Cereals - Excluding Beer; and (3) Starchy Roots.  
+
+In 2013 the items were (1) Milk - Excluding Butter; (2) Cereals - Excluding Beer; and (3) Wheat and products.
+
+Interestingly starchy roots is not even in the top 10 in 2013.  We can see in the chart that it has steadily been decreasing over time.
+
+```{r, message=FALSE}
+
+# Top 10 Units in 1961
+analysisdata %>% filter(Area == "Switzerland", Total_Units > 0, Year == 1961) %>%
+  group_by(Year, Area, Item) %>%
+  summarize(Total_Units = sum(Total_Units)) %>%
+  slice_max(Total_Units, n=10)
+
+# Top  Units in 2013
+analysisdata %>% filter(Area == "Switzerland", Total_Units > 0, Year == 2013) %>%
+  group_by(Year, Area, Item) %>%
+  summarize(Total_Units = sum(Total_Units)) %>%
+  slice_max(Total_Units, n=10)
+
+# What happened to starchy roots in Switzerland?
+analysisdata %>% filter(Area == "Switzerland", Item == "Starchy Roots", Total_Units > 0) %>%
+  ggplot(aes(x=Year, y=Total_Units)) +
+  geom_bar(stat="identity") +
+  ggtitle("Starchy Roots Production in Switzerland - 1961 to 2013")
+```
+**Question 2**
+
+*Determine whether feed has overtaken food in any areas or food items*
+
+In 2013 there were 627 items with a feed to food ratio of greater than one, meaning that more food was produced for animal consumption than human consumption for those products.  By comparison, in 1961 there were 274 products.
+
+```{r}
+# Calculate and summarize ratio for 2013
+analysisdata %>% ungroup %>% filter(Year==2013) %>% 
+  select(Item, Feed_Units, Food_Units) %>%
+  mutate(Feed_To_Food_Ratio = Feed_Units / Food_Units) %>%
+  filter(Food_Units > 0, Feed_Units > 0, Feed_To_Food_Ratio > 1) %>%
+  arrange(desc(Feed_To_Food_Ratio))
+
+# Calculate and summarize ratio for 1961
+
+analysisdata %>% ungroup %>% filter(Year==1961) %>% 
+  select(Item, Feed_Units, Food_Units) %>%
+  mutate(Feed_To_Food_Ratio = Feed_Units / Food_Units) %>%
+  filter(Food_Units > 0, Feed_Units > 0, Feed_To_Food_Ratio > 1) %>%
+  arrange(desc(Feed_To_Food_Ratio))
+
+```
+
+**Question 3**
+
+*Compare a high protein crop like a legume to an animal-based product and determine whether they have increased or decreased over time. *
+
+Both soyabean and bovine meat production have increased significantly since 1961, with soyabean production increasing by a factor of 6.3 and bovine meat by 2.63.
+
+```{r message=FALSE, warning=TRUE}
+
+bovine_soya_combined <- analysisdata %>% ungroup %>%
+  filter(Item=="Soyabeans" | Item=="Bovine Meat", Total_Units > 0) %>%
+  select(Year, Item, Total_Units) %>%
+  group_by(Year, Item) %>%
+  summarize(Total_Units = sum(Total_Units))
+
+soyabean1961 <- bovine_soya_combined %>% 
+  filter(Item == "Soyabeans", Year == 1961) %>% 
+  select(Total_Units)
+soyabean2013 <- bovine_soya_combined %>% 
+  filter(Item == "Soyabeans", Year == 2013) %>% 
+  select(Total_Units)
+
+bovine1961 <- bovine_soya_combined %>% 
+  filter(Item == "Bovine Meat", Year == 1961) %>% 
+  select(Total_Units)
+bovine2013 <- bovine_soya_combined %>% 
+  filter(Item == "Bovine Meat", Year == 2013) %>% 
+  select(Total_Units)
+
+soyabeanchange <- soyabean2013$Total_Units / soyabean1961$Total_Units
+bovinechange <- bovine2013$Total_Units / bovine1961$Total_Units
+
+chart1 <- bovine_soya_combined %>% 
+  filter(Item == "Soyabeans") %>%
+  ggplot(aes(x = Year, y = Total_Units)) +
+  geom_bar(stat="identity") +
+  ggtitle("Global Soyabeans Production - 1961 to 2013") + 
+  theme(text = element_text(size=8))
+
+chart2 <- bovine_soya_combined %>% 
+  ggplot(aes(x = Year, y = Total_Units, fill = Item)) +
+  geom_bar(position = "dodge", stat="identity") +
+  ggtitle("Global Bovine Meat vs Soyabeans Production - 1961 to 2013") + 
+  theme(text = element_text(size=8))
+
+cat("Since 1961 Soyabean production has increased by a factor of", round(soyabeanchange, 2), "\n")
+cat("Since 1961 Bovine meat production has increased by a factor of", round(bovinechange, 2), "\n")
+
+grid.arrange(arrangeGrob(chart1, chart2), nrow = 1)
+
+```
+
+### Conclusion
+
+In conclusion, production has changed dramatically since 1961 from a quantity (# of units produced), type (food versus feed), and area (country of production) perspective.  There was a significant spike in production during the early 1990's.  Detailed summary below.
+
+```{r message=FALSE}
+summaryinfo <- analysisdata %>% 
+  ungroup() %>%
+  filter(Year == 1961 | Year == 2013) %>%
+  select(Year, Feed_Units, Food_Units, Total_Units) %>%
+  group_by(Year) %>%
+  summarize(Feed_Units = sum(Feed_Units), Food_Units = sum(Food_Units), Total_Units = sum(Total_Units))
+
+feed_increase <- as.numeric(summaryinfo[2,2] / summaryinfo[1,2])
+food_increase <- as.numeric(summaryinfo[2,3] / summaryinfo[1,3])
+total_increase <- as.numeric(summaryinfo[2,4] / summaryinfo[1,4])
+
+cat("Feed production has increased by a factor of", round(feed_increase,2), "since 1961\n")
+cat("Food production has increased by a factor of", round(food_increase,2), "since 1961\n")
+cat("Total production has increased by a factor of", round(total_increase,2), "since 1961\n")
+
+```
+
+## Dataset 2: NE Collections and Expenses, by Kareem
+
+### Proposed Analysis
+
+In this project we will use the data of the north east region different collections of revenue and spending in 2016, the budget and finances of nine states in the north east with the total of US collection of revenue from that year.
+
+The following terms are used to describe a state's finances:
+
+**Revenues** come mainly from tax collections, licensing fees, federal aid, and returns on investments.
+
+**Expenditures** generally include spending on government salaries, infrastructure, education, public pensions, public assistance, corrections, Medicaid, and transportation.
+
+**State funds** include general and other state-based funds. 
+
+**Federal funds** are "funds received directly from the federal government.
+
+**Total Expense** is calculated by adding together the totals for state and federal funds used for expenditures.
+
+The analysis:
+1 - Analyze the total collection revenues and Expenses for NE States.
+2 - Compare the different collection revenues.
+3 - Analyze NE states per capita collection and per capita spending.
+
+### Data
+
+Load data from Github
+
+Formal citation for data set:
+
+Ballotpedia.  New York state budget and finances.  Retrieved 1 October 2020 from https://ballotpedia.org/New_York_state_budget_and_finances.
+
+```{r}
+url <- "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/NE_tax_and_spending.csv"
+
+NE_data <- read.csv(url, sep = ",")
+head(NE_data)
+```
+
+### Tidy
+
+Calculate the total collection which includes all different types of taxes as well as total expenses for state and federal funds. 
+
+```{r}
+# Replace NA with 0, 
+# Calculate the total collection per state
+# Calculating the total expense per state
+wide_data <- NE_data %>%
+ replace(is.na(.), 0) %>%
+ mutate(Total_collections = Property_taxes+Sales_and_gross_receipts+Licenses+Income_taxes+Other_taxes) %>%
+  mutate(Total_Expense = State_funds + Federal_funds)
+
+head(wide_data)
+```
+
+
+### Calculate 
+Calculate the per capita for collection and expenses per state
+```{r}
+wide_data <- wide_data %>%
+ mutate(Per_capita_collection = round((Total_collections / X2016_population)*1000)) %>% 
+ mutate(Per_capita_expense = round((Total_Expense / X2016_population)*1000000))
+
+head(wide_data)
+```
+
+### Transform
+Transform the data from wide to long
+
+```{r}
+
+# Transform and arrange by states
+long_data <- wide_data %>%
+ rename(Sales_receipts = Sales_and_gross_receipts, population = X2016_population) %>%
+ gather(Details, "Total", 2:14) %>%
+ arrange(State)
+
+head(long_data)
+```
+
+# Pivot the food and feed columns for a wider format.
+longdata_cs <- longdata_cs %>% 
+  pivot_wider(names_from = Element, values_from = Total_Units, values_fill = 0)
+
+### Export 
+Export data into a .csv file
+
+```{r}
+# Get working directory path
+path <- getwd()
+
+# Export file to working directory.  The file.path function has been used to ensure platform independence (i.e. take into account the different path syntaxes for various operating systems)
+write.csv(long_data, file.path(path, "project2_dataset2.csv"))
+
+```
+
+### Analysis 
+
+Filtering only the Collection streams for NE States.
+```{r}
+# Selecting the target of the filter which are the collections
+target <- c("Property_taxes" , "Sales_receipts", "Licenses", "Income_taxes", "Other_taxes")
+
+# Apply the filters and filter out the US collection which is reletivly high,
+Revenue <- filter(long_data, Details %in% target & !(State == "United States"))
+
+head(Revenue)
+```
+
+Plot to compare the different Collections streams per State
+```{r}
+Revenue %>% 
+  ggplot(aes(fill=Details,y=Total,x=reorder(State,-Total))) + 
+  geom_bar(position="dodge",stat="identity") + 
+  ylab("Total Collections per Thousands")+ xlab("North East States") + 
+  theme(axis.text.x = element_text(angle=90))
+```
+
+Filtering the Per_capita_collection and Per_capita_expense for NE States.
+```{r}
+# selecting the target for filter which is per capita
+target <- c("Per_capita_collection" , "Per_capita_expense")
+
+# Filter by per capita collection and per capita expense
+long_data <- filter(long_data, Details %in% target)
+
+head(long_data)
+```
+
+Plot for Per Capita Collection and Expense for NE States.
+```{r}
+long_data %>% 
+  ggplot(aes(fill=Details,y=Total,x=reorder(State,-Total))) + 
+  geom_bar(position="dodge",stat="identity") + 
+  ylab("Per Capita Totals")+ xlab("North East States") + 
+  theme(axis.text.x = element_text(angle=90))
+```
+
+### Conclusion 
+
+Based on the above analysis we can see that New York has the highest overall state revenue, expense collections, income taxes and sales receipts, but Vermont has the highest per capita collections and Rhode Island has the highest per capita expenses.  All of the states in the North East region have higher per capita expenses than the US average, and within that region only New Hampshire fell below the US average for per capita collection.
+
+## Dataset 3: Movies on Streaming Platforms, by Jack
+
+### Approach
+
+Orli asked the question, which streaming service gives the best bang for your buck?  For this assignment I analyzed the distribution of ratings and defined a "good movie" as one standard deviation above the mean.
+
+### Data
+Load data from Github
+
+Formal citation for data set:
+
+Bhatia, Ruchi.  (2020; May).  Movies on Netflix, Primve Video, Hulu and Disney +, Version 2.  Retrieved 3 October 2020 from https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney.
+
+```{r}
+url <- "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/MoviesOnStreamingPlatforms_updated.csv"
+
+dat <- read.csv(url)
+```
+
+### Tidy
+In order for this data to be tidy, every column should be a variable and every row should be an observation. The rows are each a movie (which is our observation) but columns such as, genre, language and director each contain multiple variables. 
+
+Age could also be a useful variable to analyze if it was transformed into an int and the variable changed to minimum age (min.age)
+
+The analysis requested by the poster wanted to know the intersection between ranking score and provider, so we will need to change the IMDb and Rotten.Tomatoes rankings so they can be compared.
+
+There are also extraneous rows that will need to be dealt with after our data is tidied.
+```{r}
+glimpse(dat)
+```
+
+Ratings:
+
+-rotten.tomatoes and IMDb to percentage
+-get the percent symbol out and normalize
+
+```{r}
+dat<-dat%>%
+  mutate(Rotten.Tomatoes=as.numeric(gsub("%","",Rotten.Tomatoes)))
+
+# Rotten tomatoes as percentage
+dat$Rotten.Tomatoes<-dat$Rotten.Tomatoes/100
+
+# IMDB to percentage
+dat$IMDb<-dat$IMDb/10
+
+dat<-transform(dat,IMDb=as.numeric(IMDb),
+          Rotten.Tomatoes=as.numeric(Rotten.Tomatoes))
+
+```
+
+Age:
+
+-change age to min.age and remove the + sign, change to int
+
+```{r warning=FALSE}
+dat<-dat%>%
+  mutate(Age=as.numeric(gsub("\\+","",Age)))
+
+# Replace "all" with 0
+dat<-dat%>%
+  mutate(Age=as.numeric(gsub("all",0,Age)))
+
+```
+
+Disney is named "Disney.", ill remove the period
+```{r}
+
+dat<-dat%>%
+  rename(Disney=Disney.)
+
+```
+
+Remove type and X columns
+```{r}
+dat<-dat%>%
+  select(-X,-Type)
+
+```
+
+Genres:
+
+Note: This was not critical for the analysis, but has been included as an interesting challenge to tackle.
+
+-turn into variables for each movie type
+
+-remove original genres column
+
+Step 1:
+
+get a list of unique Genre types
+```{r}
+
+pattern<-"[A-z]+"
+list<-dat$Genres%>%
+  unlist()%>%
+  str_extract_all(pattern)%>%
+  unique()
+unique_genres<-list%>%
+  unlist()%>%
+  unique()
+unique_genres
+
+```
+
+Step 2:
+
+Use the list to create new variables and fill them when the "Genres" column contains the variable.
+
+```{r}
+dat1<-dat
+N<-length(unique_genres)
+
+# Create regex pattern for the list of unique genres
+pat<-paste(unique_genres,collapse="|")
+
+# Loop to create variables for each movie type
+for(i in 1:N){
+  # Load variable with genre of interest
+  var<-unique_genres[i]
+
+  dat1<-dat1%>%
+    mutate( !!var := str_extract(Genres,!!var))
+}
+
+# Change value from name of the genre to binary
+dat2 <- data.frame(
+  lapply(dat1,function(x){
+    gsub(pat,1,x)
+  }))
+
+# Remove extraneous columns
+dat2 <- dat2%>%
+  select(-Genres,-Fi,-TV,-Show,-Film)
+
+dat2 %>%
+  select(Action:Noir) %>%
+  head()
+
+```
+
+The film genres are now variables, so you could do analysis like calculating which genre is the highest rated. 
+
+### Analysis
+
+**Exploring the Ratings**
+
+First I want to see the distributions of the Rotten Tomatoes and IMDb scores. If they are similar enough, maybe I can impute a missing score from the other.
+
+```{r}
+scores <- dat1 %>%
+  filter((!is.na(IMDb)), !is.na(Rotten.Tomatoes))%>%
+  select(IMDb,Rotten.Tomatoes)
+
+scores <- scores %>%
+  mutate(
+    avg_score=rowMeans(.)
+  )
+
+# Summary tibble
+imdb_summary<-summary(scores$IMDb)
+rotten_summary<-summary(scores$Rotten.Tomatoes)
+avg_summary<-summary(scores$avg_score)
+
+sum_titles<-c("min","1st Q","median","mean","3rd Q","Max")
+
+summary_tibble<-tibble(sum_titles,imdb_summary,rotten_summary,avg_summary)
+
+boxplot(scores)
+```
+
+Interpreting the boxplot and summary:
+
+It seems that the IMDb ratings are highly clustered around the mean, with a left skew. The Rotten Tomatoes scores seem to be much more evenly distributed because the IQR is much wider. Let's look at a histogram to confirm.
+
+```{r warning=FALSE}
+score_longer<-scores%>%
+  select(IMDb,Rotten.Tomatoes)%>%
+  pivot_longer(
+    cols = IMDb:Rotten.Tomatoes,
+    names_to="scorer",
+    values_to="values"
+  )
+
+score_longer %>% 
+  ggplot(aes(x=values,color=scorer))+
+  geom_histogram(fill="white",alpha=0.5,position="identity",bins=100)
+```
+
+I would expect the "actual quality" of movies to be a normal distribution. For this reason I am tempted to reject the Rotten Tomatoes ratings for my analysis. There might be some bias in the Rotten Tomatoes ratings that I will discuss in my conclusion.
+
+Since we are rejecting the Rotten Tomatoes ratings, we can bring back in all of the scored IMDb ratings.
+
+```{r}
+imdb_scores<-dat1%>%
+  filter(!is.na(IMDb))%>%
+  select(IMDb)%>%
+  pivot_longer(
+    cols = IMDb,
+    names_to="IMDb",
+    values_to="score"
+  )
+
+ggplot(imdb_scores,aes(x=score))+
+  geom_histogram(bins=30)
+```
+
+Now that I have a good distribution, I want to decide what a good movie is. I will say that any movie 1 standard deviation above the mean is a good movie.
+
+```{r}
+# Get the score floor
+score_floor<-mean(imdb_scores$score)+sd(imdb_scores$score)
+
+# Get our database with imdb scores greater than the score floor
+tidy_data<-dat1%>%
+  filter(!is.na(IMDb))%>%
+  filter(IMDb>!!score_floor)%>%
+  select(Title,IMDb,Netflix,Hulu,Prime.Video,Disney)
+
+good_count<-tidy_data%>%
+  summarize(sum(Netflix),sum(Hulu),sum(Prime.Video),sum(Disney))%>%unlist
+good_count<-str_extract(good_count, "\\d+")%>%
+  as.numeric()
+
+provider<-c("netflix","hulu","prime_video","disney")
+
+cost<-c(8.99,11.99,8.99,6.99)
+
+cost_compare<-tibble("provider"=provider,"good_movies"=good_count,"price"=cost)
+
+cost_compare<-cost_compare%>%
+  mutate("movie_per_dollar" = round(good_movies/price,2))
+  
+cost_compare%>%
+  select(provider,movie_per_dollar)
+```
+
+### Conclusion
+
+I believe we should reject the Rotten Tomatoes scores because I believe it is biased. Rotten Tomatoes is a consumer targeted movie ranking site. I believe there is probably a lot of manipulation of scores by movie producers to try to get people to go to the movie. There is evidence of this as the largest bin is a 100% score, and the count seems to increase linearly with score. 
+
+If we decide value is based on the amount of good movies we have access to, then we should count the number of good movies available on a streaming service and get a metric of good movies per dollar. Clearly from the tibble above, Amazon Prime is the streaming service that offers the most good movies per dollar.
