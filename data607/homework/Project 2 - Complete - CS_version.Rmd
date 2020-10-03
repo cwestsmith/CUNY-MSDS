@@ -313,10 +313,6 @@ long_data <- wide_data %>%
 head(long_data)
 ```
 
-# Pivot the food and feed columns for a wider format.
-longdata_cs <- longdata_cs %>% 
-  pivot_wider(names_from = Element, values_from = Total_Units, values_fill = 0)
-
 ### Export 
 Export data into a .csv file
 
