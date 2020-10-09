@@ -1,0 +1,23 @@
+[
+ {
+   "Title": "Count of Monte Cristo",
+   "Authors": "Alexander Dumas",
+   "Genre": "French Literature",
+   "Number_Pages": 400,
+   "Cover_Type": "Hard"
+ },
+ {
+   "Title": "Anna Karenina",
+   "Authors": "Leo Tolstoy",
+   "Genre": "Russian Literature",
+   "Number_Pages": 700,
+   "Cover_Type": "Soft"
+ },
+ {
+   "Title": "R for Data Science",
+   "Authors": "Hadley Wickham, Garrett Grolemund",
+   "Genre": "Data Science",
+   "Number_Pages": 300,
+   "Cover_Type": "Soft"
+ }
+]

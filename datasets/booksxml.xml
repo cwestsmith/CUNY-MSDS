@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<root>
+    <book>
+        <Title>Count of Monte Cristo</Title>
+        <Authors>Alexander Dumas</Authors>
+        <Genre>French Literature</Genre>
+        <Number_Pages>400</Number_Pages>
+        <Cover_Type>Hard</Cover_Type>
+    </book>
+    <book>
+        <Title>Anna Karenina</Title>
+        <Authors>Leo Tolstoy</Authors>
+        <Genre>Russian Literature</Genre>
+        <Number_Pages>700</Number_Pages>
+        <Cover_Type>Soft</Cover_Type>
+    </book>
+    <book>
+        <Title>R for Data Science</Title>
+        <Authors>Hadley Wickham</Authors>
+        <Genre> Garrett Grolemund</Genre>
+        <Number_Pages>Data Science</Number_Pages>
+        <Cover_Type>300</Cover_Type>
+    </book>
+</root>
