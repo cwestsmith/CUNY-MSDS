@@ -1,0 +1,115 @@
+---
+title: "Data 607 - Week 7 Assignment"
+author: "Cameron Smith"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(RCurl)
+library(XML)
+library(rjson)
+```
+
+# Introduction and Approach
+
+For this assignment I prepared 3 separate files with the same data in order to practice loading the formats into R, convert them to data frames and compare the differences.  The 3 formats are: HTML, JSON and XML.
+
+Each file contained data on books, including the following attributes:  
+* Title  
+* Authors  
+* Number of Pages  
+* Genre  
+* Cover Type (Hard or Soft)  
+
+Each of the files was manually written and then loaded into Github for reference / reproducibility.
+
+## Load HTML file
+
+```{r}
+url1 <- "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/bookshtml.html"
+htmlraw <- getURL(url1)
+# The HTML file loaded as class "character"
+class(htmlraw)
+html_df <- readHTMLTable(htmlraw,which=1)
+# Convert Num_Pages column to numeric
+html_df$Number_Pages <- as.numeric(html_df$Number_Pages)
+# Confirm how it has been loaded, in this case as a data frame
+class(html_df)
+```
+
+## Load JSON file
+
+```{r}
+url2 <- "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/booksjson.json"
+jsonraw <- fromJSON(file = url2)
+# The JSON file loaded as class "list"
+class(jsonraw)
+# Convert to a data frame
+# Using rbind as otherwise it would be imported as a wide structure (one row)
+json_df <- data.frame(do.call("rbind", jsonraw))
+# Use the TidyR unnest function to unnest the data, and then convert it back into a data frame
+json_df <- unnest(json_df, cols = c(Title, Authors, Genre, Number_Pages, Cover_Type)) %>% data.frame()
+class(json_df)
+```
+
+## Load XML file
+
+As xmlParse does not seem to support HTTPS, I used getURL from the RCurl package to first grab the data from Github. In difference to the other files which come in as a different object type, XML files are imported directly as XML so need to be manually converted to a data frame afterwards.
+
+```{r}
+
+xmlraw <- getURL("https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/booksxml.xml")
+xmlraw <- xmlParse(xmlraw)
+# The XML file loaded as class "XML"
+class(xmlraw)
+# Get the root node
+xmlroot <- xmlRoot(xmlraw)
+# Extract the XML data
+xml_df <- xmlSApply(xmlroot, function(x) xmlSApply(x, xmlValue))
+# Convert the XML into a data frame
+xml_df <- data.frame(t(xml_df),row.names=NULL)
+# Convert Num_Pages column to numeric
+xml_df$Number_Pages <- as.numeric(xml_df$Number_Pages)
+
+```
+## View each data frame
+
+The data frames are now all of similar format and type, as can be seen below.
+
+### HTML
+
+Here is the HTML data frame:
+
+```{r}
+html_df
+```
+### JSON
+
+Here is the JSON data frame:
+
+```{r}
+json_df
+```
+
+### XML
+
+Here is the XML data frame:
+
+```{r}
+xml_df
+```
+
+## Conclusion
+
+In conclusion, it was possible to load each of the files from a remote source.  RCurl needed to be used for the HTML and XML files, but the JSON file could be imported directly via the fromJSON function.  Each of the file types loaded a bit differently and required some manual effort for harmonization.  
+
+In particular:  
+* The HTML file required the number of pages column to be converted to numeric.  
+* The JSON file required the most effort of all 3.  First it had to be converted from a wide to a long format, and from there it needed to be unnested.  
+* Unlike HTML and JSON which were imported into common R objects (characters and lists), the XML file was imported automatically as an XML object.  The data then had to be extracted using XMLSapply, and as with the HTML file the number of pages column required conversion to numeric.  
+
+
