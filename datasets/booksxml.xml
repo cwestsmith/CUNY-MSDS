@@ -16,7 +16,10 @@
     </book>
     <book>
         <Title>R for Data Science</Title>
-        <Authors>Hadley Wickham, Garrett Grolemund</Authors>
+        <Authors>
+            <Author>Hadley Wickham</Author>
+            <Author>Garrett Grolemund</Author>
+        </Authors>
         <Genre>Data Science</Genre>
         <Number_Pages>300</Number_Pages>
         <Cover_Type>Soft</Cover_Type>
