@@ -1,0 +1,335 @@
+---
+title: "Data606 - Lab 7"
+author: "Cameron Smith"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(openintro)
+library(infer)
+```
+
+### Exercise 1
+
+*What are the cases in this data set? How many cases are there in our sample?*
+
+This sample includes 13,583 observations, with 14 different variables.
+
+```{r code-chunk-label}
+data(yrbss)
+glimpse(yrbss)
+```
+
+### Exercise 2
+
+*How many observations are we missing weights from?*
+
+This sample is missing 1,004 weights (i.e. there are 1,004 NAs per the below).
+
+```{r}
+summary(yrbss$weight)
+```
+
+
+### Exercise 3
+
+*Make a side-by-side boxplot of physical_3plus and weight. Is there a relationship between these two variables? What did you expect and why?*
+
+Based on the below visual it is difficult to tell if there is a statistically signicant relationship, but the data does show that the mean weight for those who do not exercise is lower.  However, there are also more outliers, and the upper quantile is higher.  I would expect a relationship to exist although I think there are likely many more factors that need to be taken into account - this data represents a good example of the 'correlation vs causation' challenge.
+
+
+```{r}
+
+yrbss <- yrbss %>% 
+  mutate(physical_3plus = ifelse(yrbss$physically_active_7d > 2, "yes", "no"))
+
+weight_exercise <- yrbss %>% 
+  filter(physical_3plus == "yes") %>% 
+  select(weight) %>% 
+  na.omit()
+
+weight_noexercise <- yrbss %>% 
+  filter(physical_3plus == "no") %>% 
+  select(weight) %>% 
+  na.omit()
+
+boxplot(weight_exercise$weight, weight_noexercise$weight,
+        names = c("exercise", "no_exercise"))
+
+```
+
+### Exercise 4
+
+*Are all conditions necessary for inference satisfied? Comment on each. You can compute the group sizes with the summarize command above by defining a new variable with the definition n().*
+
+The key elements are:
+
+* Independent sample (assumed yes, though not 100% clear)
+* Normality - at least 30 samples (yes)
+
+Yes, the conditions are satisfied.  Added the 'count' variable below to verify the success-failure condition.
+
+```{r}
+yrbss %>%
+  group_by(physical_3plus) %>%
+  summarise(mean_weight = mean(weight, na.rm = TRUE), count = n())
+```
+
+
+### Exercise 5
+
+*Write the hypotheses for testing if the average weights are different for those who exercise at least times a week and those who don’t.*
+
+Null hypothesis: There is no difference in average weights for those who exercise at least 3 times a week and those who don't.
+
+### Exercise 6
+
+Zero of the permutations have a difference of at least obs_stat.
+
+```{r}
+obs_diff <- yrbss %>%
+  specify(weight ~ physical_3plus) %>%
+  calculate(stat = "diff in means", order = c("yes", "no"))
+
+null_dist <- yrbss %>%
+  specify(weight ~ physical_3plus) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in means", order = c("yes", "no"))
+
+# How many have a greater value than obs_diff?
+null_dist %>% filter(stat >= 	obs_diff) %>% nrow()
+
+ggplot(data = null_dist, aes(x = stat)) +
+  geom_histogram()
+```
+
+### Exercise 7
+
+*Construct and record a confidence interval for the difference between the weights of those who exercise at least three times a week and those who don’t, and interpret this interval in context of the data.*
+
+Conditions for inference for a sample mean:
+
+* Independent sample (assumed yes, though not 100% clear)
+* Normality - there are some outliers but with n much greater than 30 it should be ok
+
+Per the calculation below, we are 95% confident that the the difference between the weights of those who exercise at least three times a week and those who don't is between -.76% and 4.31%.
+
+```{r}
+
+mean1 <- mean(weight_noexercise$weight)
+sd1 <- sd(weight_noexercise$weight)
+max1 <- max(weight_noexercise$weight)
+
+
+mean2 <- mean(weight_exercise$weight)
+sd2 <- sd(weight_exercise$weight)
+max2<- max(weight_exercise$weight)
+
+# Check for extreme outliers
+cat("The max of weight_noexercise is", max1, "and the mean plus 2.5 sd is", (mean1 + (2.5 * sd1)), "\n")
+cat("The max of weight_exercise is", max2, "and the mean plus 2.5 sd is", (mean2 + (2.5 * sd2)), "\n")
+
+# Calculate standard error
+meandiff <- mean2 - mean1
+stderror <- 
+  sqrt(
+  ((mean2^2) / 8342) +
+  ((mean1^2) / 4022)
+  )
+degfreedom <- 8342-1
+
+# Calculate T-value and confidence intervla
+tvalue <- qt(.05/2, degfreedom, lower.tail = FALSE)
+rightinterval <- meandiff + tvalue * stderror
+leftinterval <- meandiff - tvalue * stderror
+cat("The 95% confidence interval is from", round(leftinterval,2), "%", "to", round(rightinterval, 2), "% \n")
+
+```
+
+### Exercise 8
+
+*Calculate a 95% confidence interval for the average height in meters (height) and interpret it in context.*
+
+* Independent sample (assumed yes, though not 100% clear)
+* Normality - there are some outliers but nothing too extreme
+
+Per the calculation below, we are 95% confident that the mean height is between 1.689 meters and 1.693 meters.
+
+```{r}
+height_data <- yrbss %>% select(height) %>% na.omit()
+
+meanheight <- mean(height_data$height)
+sd3 <- sd(height_data$height)
+max3 <- max(height_data$height)
+sdheight <- sd(height_data$height)
+stderrorheight <- sdheight / sqrt(nrow(height_data))
+
+# Check for extreme outliers
+cat("The max of height_data is", max3, "and the mean plus 2.5 sd is", (meanheight + (2.5 * sd3)), "\n")
+
+# Calculate confidence interval
+tvalueheight <- qt(.05/2, nrow(height_data) - 1, lower.tail = FALSE)
+rightintheight <- meanheight + tvalueheight * stderrorheight
+leftintheight <- meanheight - tvalueheight * stderrorheight
+
+cat("The 95% confidence interval is from", round(leftintheight,3), "meters", "to", round(rightintheight, 3), "meters \n")
+```
+
+### Exercise 9
+
+*Calculate a new confidence interval for the same parameter at the 90% confidence level. Comment on the width of this interval versus the one obtained in the previous exercise.*
+
+With a 90% confidence level the interval is narrower, as follows:
+
+```{r}
+tvalueheight <- qt(.1/2, nrow(height_data) - 1, lower.tail = FALSE)
+rightintheight <- meanheight + tvalueheight * stderrorheight
+leftintheight <- meanheight - tvalueheight * stderrorheight
+
+cat("The 90% confidence interval is from", round(leftintheight,3), "meters", "to", round(rightintheight, 3), "meters \n")
+```
+### Exercise 10
+
+*Conduct a hypothesis test evaluating whether the average height is different for those who exercise at least three times a week and those who don’t.*
+
+Null hypothesis: There is no difference in height between those who exercise at least three times a week and those who don't.
+
+Conditions for inference for a difference in means:
+
+* Independent sample (assumed yes, though not 100% clear)
+* Normality - there are some outliers but they are not particularly extreme
+
+Based on the below calculation, the P-value is .05 which means the null hypothesis can be rejected.  However, this is a surprising outcome and I have a feeling it would result in a Type 1 error.
+
+```{r}
+
+height_exercise <- yrbss %>% 
+  filter(physical_3plus == "yes") %>% 
+  select(height) %>% 
+  na.omit()
+
+height_noexercise <- yrbss %>% 
+  filter(physical_3plus == "no") %>% 
+  select(height) %>% 
+  na.omit()
+
+# Starting with a box plot for an initial idea
+boxplot(height_exercise$height, height_noexercise$height,
+        names = c("exercise", "no_exercise"))
+
+mean4 <- mean(height_noexercise$height)
+sd4<- sd(height_noexercise$height)
+max4 <- max(height_noexercise$height)
+
+mean5 <- mean(height_exercise$height)
+sd5 <- sd(height_exercise$height)
+max5 <- max(height_exercise$height)
+
+cat("The max of height_noexercise is", max4, "and the mean plus 2.5 sd is", (mean4 + (2.5 * sd4)), "\n")
+cat("The max of height_exercise is", max5, "and the mean plus 2.5 sd is", (mean5 + (2.5 * sd5)), "\n")
+
+# Calculate the standard error
+meandiff <- mean5 - mean4
+stderror <- 
+  sqrt(
+  ((mean5^2) / nrow(height_exercise)) +
+  ((mean4^2) / nrow(height_noexercise))
+  )
+
+# Calculate the T-value and confidence interval
+degfreedomht2 <- 4022-1
+tvalueht2 <- qt(.05/2, degfreedomht2, lower.tail = FALSE)
+rightintervalht <- meandiff + tvalueht2 * stderror
+leftintervalht <- meandiff - tvalueht2 * stderror
+cat("The 95% confidence interval is from", round(leftintervalht,2), "%", "to", round(rightintervalht, 2), "% \n")
+
+# Calculate the P-value
+pvalueht2 <- 2*pt(tvalueht2,degfreedomht2, lower.tail = FALSE)
+cat("The P-value is", pvalueht2, "and thus the null hypothesis can be rejected")
+
+```
+
+### Exercise 11
+
+*Now, a non-inference task: Determine the number of different options there are in the dataset for the hours_tv_per_school_day there are.*
+
+Per the below there are 7 different options, plus NA.
+
+```{r}
+yrbss %>% group_by(hours_tv_per_school_day) %>% summarise(n())
+```
+
+### Exercise 12
+
+*Come up with a research question evaluating the relationship between height or weight and sleep. Formulate the question in a way that it can be answered using a hypothesis test and/or a confidence interval. Report the statistical results, and also provide an explanation in plain language. Be sure to check all assumptions, state your α level, and conclude in context.*
+
+Research question: Is there convincing evidence that students who are taller than the mean height sleep better than students who are shorter than the mean height?
+
+Null hypothesis: There is no relationship between above or below the mean height and sleep for students.
+
+α Level: .05 (95% confident)
+
+Conditions for inference for a difference in means:
+
+* Independent sample (assumed yes, though not 100% clear)
+* Normality - there are some outliers but they are not particularly extreme
+
+Result: The P-value of 0.05 and thus the null hypothesis must be rejected.  However, as with the previous example I think this would lead to a Type 1 error.
+
+```{r}
+
+yrbss <- yrbss %>%
+  mutate(sleep_6plus = ifelse(yrbss$school_night_hours_sleep > 5, "yes", "no"))
+
+heightlesssleep <- yrbss %>% 
+  select(height, sleep_6plus) %>% 
+  filter(sleep_6plus == "no") %>%
+  na.omit()
+
+heightmoresleep <- yrbss %>% 
+  select(height, sleep_6plus) %>% 
+  filter(sleep_6plus == "yes") %>%
+  na.omit()
+
+# Starting with a box plot for an initial idea
+boxplot(heightlesssleep$height, heightmoresleep$height,
+        names = c("less_sleep", "more_sleep"))
+
+mean6 <- mean(heightlesssleep$height)
+sd6 <- sd(heightlesssleep$height)
+max6 <- max(heightlesssleep$height)
+
+mean7 <- mean(heightmoresleep$height)
+sd7 <- sd(heightmoresleep$height)
+max7 <- max(heightmoresleep$height)
+
+cat("The max of heightmoresleep is", max6, "and the mean plus 2.5 sd is", (mean6 + (2.5 * sd6)), "\n")
+cat("The max of heightlesssleep is", max7, "and the mean plus 2.5 sd is", (mean7 + (2.5 * sd7)), "\n")
+
+# Calculate the standard error
+meandiff_htsleep <- mean7 - mean6
+stderror_htsleep <- 
+  sqrt(
+  ((mean7^2) / nrow(heightmoresleep)) +
+  ((mean6^2) / nrow(heightlesssleep))
+  )
+
+# Calculate the T-value and confidence interval
+degfreedom_htsleep <- 2492-1
+tvaluehtsleep <- qt(.05/2, degfreedom_htsleep, lower.tail = FALSE)
+rightinterval_htsleep <- meandiff_htsleep + tvaluehtsleep * stderror_htsleep
+leftinterval_htsleep <- meandiff_htsleep - tvaluehtsleep * stderror_htsleep
+cat("The 95% confidence interval is from", round(leftinterval_htsleep,2), "meters to", round(rightinterval_htsleep, 2), "meters \n")
+
+# Calculate the P-value
+pvalue_htsleep <- 2*pt(tvaluehtsleep,degfreedom_htsleep, lower.tail = FALSE)
+cat("The P-value is", pvalue_htsleep, "and thus the null hypothesis can be rejected")
+
+```
+
