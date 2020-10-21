@@ -1,0 +1,73 @@
+---
+title: "Data 607 - Week 9 Homework"
+author: "Cameron Smith"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+  toc: true
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(knitr)
+library(httr)
+library(jsonlite)
+```
+
+# Introduction / description
+
+For this assignment our task was to choose one of the New York Times APIs, construct an interface in R to read the JSON data, and transform it into an R DataFrame.
+
+## Overview of approach
+
+I chose the "Most Popular" API which makes available information on the most popular NY Times articles.  I retrieved info for the last day, though it is also possible to increase the number by modifying the API call.  This required first setting up a NY Times developer account, and from there selecting the API I want to use for which an API key was assigned.
+
+Link to more information:
+https://developer.nytimes.com/docs/most-popular-product/1/overview
+
+## Retrieve the data
+
+The data is retrieved using the GET function from the httr package, which retrieves JSON data.  It is then converted via the fromJSON function.
+
+```{r echo=TRUE}
+# Send GET request
+res = GET("https://api.nytimes.com/svc/mostpopular/v2/viewed/1.json?api-key=9OzGBXzGGQI4Ql8IEMXVM2CiMTPp63T2")
+
+# Confirm it was successful - code 200 is desired
+cat("The status returned is:", res$status_code)
+
+# Convert JSON data
+data <- fromJSON(rawToChar(res$content))
+
+#Check to see what came back
+names(data)
+
+```
+
+## Structure the data
+
+The key data can be extracted and placed in a data frame by selecting it as follows.
+
+```{r}
+# Create the data frame
+df <- data.frame(data$results, stringsAsFactors = FALSE)
+```
+
+## View the data
+
+```{r}
+# View summary of top articles
+df %>% 
+  select(title, section, published_date) %>% 
+  rename("Title" = title, "Section" = section, "Published Date" = published_date) %>% 
+  kable
+
+# Confirm that the data is in a data frame (objective of the assignment)
+truefalse <- is.data.frame(df)
+cat("Is this a dataframe?", truefalse)
+
+```
+
+# Conclusion
+
+Using a combination of the httr and jsonlite packages we can retrieve, format and use data from APIs - in this case the NY Times.
