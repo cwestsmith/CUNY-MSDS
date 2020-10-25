@@ -1,0 +1,107 @@
+---
+title: "DATA 606 Data Project Proposal"
+author: "Cameron Smith"
+output: pdf_document
+---
+
+### Data Preparation
+
+```{r setup, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+# Load libraries
+library(tidyverse)
+
+# load data from Github
+file = "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/wvsdata_606project"
+df <- read.csv(file, header=TRUE)
+
+# Create data frame using with more readable column names and excluding the row number
+names(df) <- c("row_num", "country_code", "num_children", "level_happiness")
+df <- df %>% select("country_code", "num_children", "level_happiness")
+```
+
+
+### Research question 
+
+**You should phrase your research question in a way that matches up with the scope of inference your dataset allows for.**
+
+As someone about to enter the world of parenthood I thought it would be interesting to look at the potential relationship between having children and one's level of happiness.  The specific research question I will be asking is: *Are people with children happier than people without children?*
+
+Null hypothesis: People with at least one child are no happier than those without children.
+Alternative hypothesis: People with at least one child are happier than those without children.
+
+I will focus primarily on whether parents (i.e. people with at least one child) are on average happier than non-parents.  I will also look at whether the answer varies depending on the number of children one has and/or the country they live in.  In addition to answering the primary research question mentioned above, with this information one should be able to assess where in the world they should live and how many children they should have (1 or greater) to attain 'peak parental happiness'.
+
+### Cases 
+
+**What are the cases, and how many are there?**
+
+The dataset currently (the website notes that it is still a work in progress) spans 77 countries and includes 69,578 observations covering the years 2017 to 2020.
+
+### Data collection 
+
+**Describe the method of data collection.**
+
+From the WVS Website:
+
+*The main method of data collection in the WVS survey is face-to-face interview at respondent’s home / place of residence. Other interview modes employed in WVS-7 include postal survey, self-administered online survey, and telephone interview (in combination with other surveying techniques).*
+
+### Type of study 
+
+**What type of study is this (observational/experiment)?**
+
+This is an observational study.
+
+### Data Source 
+
+**If you collected the data, state self-collected. If not, provide a citation/link.**
+
+The data is "Wave 7" from the World Values Survey (WSV), and the details - including a link to where the full data set can be downloaded, is below.  However, please note that the date used in this file is an extract I made from that original data set that only includes data for the variables relevant for this project.  The original file includes 536 separate variables.
+
+WVS wave 7 (2017-2020):
+Haerpfer, C., Inglehart, R., Moreno, A., Welzel, C., Kizilova, K., Diez-Medrano J., M. Lagos,
+P. Norris, E. Ponarin & B. Puranen et al. (eds.). 2020. World Values Survey: Round Seven –
+Country-Pooled Datafile. Madrid, Spain & Vienna, Austria: JD Systems Institute & WVSA
+Secretariat [Version: http://www.worldvaluessurvey.org/WVSDocumentationWV7.jsp].
+
+### Dependent Variable
+
+**What is the response variable? Is it quantitative or qualitative?**
+
+The response variable is "Feeling of happiness", which is a qualitative (ordinal) variable.
+
+### Independent Variable
+
+**You should have two independent variables, one quantitative and one qualitative.**
+
+The main independent variable will be number of children, which is quantitative.
+The secondary independent variable will be the country they live in, which is qualitative.
+
+### Relevant summary statistics 
+
+**Provide summary statistics for each the variables. Also include appropriate visualizations related to your research question (e.g. scatter plot, boxplots, etc). This step requires the use of R, hence a code chunk is provided below. Insert more code chunks as needed.**
+
+```{r message=FALSE}
+# Remove rows with NA values (Note...the # of NA rows is significant - about 1/3)
+df_new <- na.omit(df)
+
+# Quick look at the data
+df_new %>% group_by(num_children) %>% 
+  summarize("num_rows" = n(), "avg_happiness" = mean(level_happiness))
+
+# Histogram of number of children
+hist(df_new$num_children, xlab = "Number of Children")
+
+# Mean of happiness level for top 10 countries w/ mean number of children
+df_summarized <- df_new %>% group_by(country_code) %>% 
+  summarize("avg_happiness" = mean(level_happiness), "avg_num_children" = mean(num_children))
+top_n(arrange(df_summarized, desc(avg_happiness)), 10)
+
+# Separate data for parents and non-parents
+parents_df <- df_new %>% filter(num_children > 0)
+nonparents_df <- df_new %>% filter(num_children == 0)
+
+# Boxplots of happiness levels - parents vs non-parents
+boxplot(parents_df$level_happiness, nonparents_df$level_happiness, names = c("parents", "non-parents"))
+
+```
+
