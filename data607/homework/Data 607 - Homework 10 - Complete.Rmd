@@ -1,0 +1,362 @@
+---
+title: "Data 607 - Homework 10"
+author: "Cameron Smith"
+date: "10/29/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Description
+
+This assignment is focused on sentiment analysis and is uses code examples from the following book:
+
+Silge, J. and Robinson, D. (2020).  Text Mining with R: A Tidy Approach.  Retrieved from https://www.tidytextmining.com.
+
+## Overview of Approach
+
+Per the assignment's instructions I have focused the first part of this assignment on running the code from the above-referenced book in order to see and learn how sentiment analysis in R works.  From there I extended the code and examples with an additional corpus and dictionary to apply my new knowledge.
+
+## Examples From the Book
+
+The following code is an annotated version of the examples from the book (see citation above).
+
+```{r}
+# Get measures of the 3 below lexicons
+library(tidytext)
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+
+# Find most common words / using inner join
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]",
+                                            ignore_case = TRUE
+    )))
+  ) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+
+# Start sentiment analysis
+nrc_joy <- get_sentiments("nrc") %>%
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+
+# Spread data, calculate a net sentiment
+library(tidyr)
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+# Plot net sentinment scores
+library(ggplot2)
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+
+# Compare the 3 dictionaryies: choose words intereted in
+pride_prejudice <- tidy_books %>%
+  filter(book == "Pride & Prejudice")
+
+pride_prejudice
+
+# Define larger spans of text
+afinn <- pride_prejudice %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(index = linenumber %/% 80) %>%
+  summarise(sentiment = sum(value)) %>%
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>%
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>%
+    inner_join(get_sentiments("nrc") %>%
+                 filter(sentiment %in% c(
+                   "positive",
+                   "negative"
+                 ))) %>%
+    mutate(method = "NRC")
+) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+# Bind rows together and visualize them
+bind_rows(
+  afinn,
+  bing_and_nrc
+) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+
+# Look at positive and negative words in lexicons
+get_sentiments("nrc") %>%
+  filter(sentiment %in% c(
+    "positive",
+    "negative"
+  )) %>%
+  count(sentiment)
+
+get_sentiments("bing") %>%
+  count(sentiment)
+
+# Find out how much each word contributed to the sentiment
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+# Show it visually
+bing_word_counts
+
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(
+    y = "Contribution to sentiment",
+    x = NULL
+  ) +
+  coord_flip()
+
+# Add rows to custom stop words list
+custom_stop_words <- bind_rows(
+  tibble(
+    word = c("miss"),
+    lexicon = c("custom")
+  ),
+  stop_words
+)
+
+custom_stop_words
+
+# Create a wordcloud
+library(wordcloud)
+
+tidy_books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+
+# Wordcloud using most common positive and negative words
+library(reshape2)
+
+tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(
+    colors = c("gray20", "gray80"),
+    max.words = 100
+  )
+
+# Tokenize text into sentences
+PandP_sentences <- tibble(text = prideprejudice) %>%
+  unnest_tokens(sentence, text, token = "sentences")
+
+PandP_sentences$sentence[2]
+
+# Split into data frames by chapter
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text,
+                token = "regex",
+                pattern = "Chapter|CHAPTER [\\dIVXLC]"
+  ) %>%
+  ungroup()
+
+austen_chapters %>%
+  group_by(book) %>%
+  summarise(chapters = n())
+
+# For each book, which has highest proportion of negative words
+bingnegative <- get_sentiments("bing") %>%
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords / words) %>%
+  filter(chapter != 0) %>%
+  top_n(1) %>%
+  ungroup()
+
+# End of code from book examples
+```
+
+## Extend the Code
+
+The following section extends the code by extending it to a new corpus and a new lexicon.
+
+For the corpus, I used the guttenbergr package to download the text of the U.S. Declaration of Independence.
+
+For the lexicon, I used the syuzhet package by Matthew Jockers et al of the Nebraska Literary Lab.
+
+The Syuzhet dictionary was created in the Nebraska Literary Lab by Matthew Jockers et al. IT ranks each term on a scale of -1 to 1.
+
+More info at the below link:
+https://www.rdocumentation.org/packages/syuzhet/versions/1.0.4
+
+### Load Lexicon and Corpus
+
+```{r}
+# Load gutenberg library and download the Declaration of Independence
+library(gutenbergr)
+decl_ind <- gutenberg_download(1)
+
+# Load the Syuzhet lexicon
+library(syuzhet)
+syuzhet_lex <- syuzhet::get_sentiment_dictionary()
+
+```
+
+### Tidy the Data
+
+```{r}
+# Tidy the data with an added column to indicate row number
+decl_ind_tidy <- decl_ind %>%
+  mutate(
+    linenumber = row_number(),
+  )
+
+# Tokenize the data with each word being a token
+decl_ind_tidy <- decl_ind_tidy %>% unnest_tokens(word, text)
+
+# Remove the stop words to focus the analysis on more relevant terms
+data("stop_words")
+decl_ind_tidy <- decl_ind_tidy %>% 
+  anti_join(stop_words)
+
+# View most common words
+decl_ind_tidy %>%
+  count(word, sort = TRUE)
+
+# Visualize with horizontal bar chart, filtered by words used over 25 times
+decl_ind_tidy %>% 
+  count(word, sort = TRUE) %>%
+  filter(n > 25) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+
+```
+
+### Add Custom Stop Words
+
+In the above chart we can see that 'etext' appears erroneously in the results, so I added it to a custom stop words list.
+
+```{r}
+custom_stop_words <- bind_rows(
+  tibble(
+    word = c("etext"),
+    lexicon = c("custom")
+  ),
+  stop_words
+)
+
+# Use the anti-join function again to strip out the custom stop words
+decl_ind_tidy <- decl_ind_tidy %>% 
+  anti_join(custom_stop_words)
+
+# Visualize the data again to verify 'etext' no longer appears
+decl_ind_tidy %>% 
+  count(word, sort = TRUE) %>%
+  filter(n > 25) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+
+```
+
+### Summarize Sentiment
+
+The below code summarizes the sentiment with 3 separate lexicons (including the new one), and then plots the summarizes next to each other for easy comparison.
+
+```{r}
+
+# Summarize sentiment using syuzhet lexicon
+decl_syuzhet_lex <- decl_ind_tidy %>%
+  inner_join(syuzhet_lex) %>%
+  group_by(index = linenumber %/% 40) %>%
+  summarise(sentiment = sum(value)) %>%
+  mutate(method = "SYUZHET")
+
+# Summarize sentiment using nrc and bing lexicons, w/ groups of 40 words
+decl_bing_and_nrc <- bind_rows(
+  decl_ind_tidy%>%
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  decl_ind_tidy %>%
+    inner_join(get_sentiments("nrc") %>%
+                 filter(sentiment %in% c(
+                   "positive",
+                   "negative"
+                 ))) %>%
+    mutate(method = "NRC")
+) %>%
+  count(method, index = linenumber %/% 40, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+# Combine the results for use in plotting
+# Interestingly the results are pretty different
+bind_rows(
+  decl_syuzhet_lex,
+  decl_bing_and_nrc
+) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+
+```
+
+### Create Wordcloud
+
+The below code creates a wordcloud, excluding the stop_words (including the custom stop words added).
+```{r}
+decl_ind_tidy %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+## Conclusion
+
+In conclusion, as described in Text Mining With R: A Tidy Approach, we can use a variety of dictionaries for sentiment analysis in R to perform various types of analysis on text.  The best dictionary depends on the context of the specific challenge or need as each have their strengths and weaknesses, although the general format and use of each is similar.  For the Declaration of Independence I chose Syuzhet because of its scale of -1 to 1 which gives a more granular breakdown of sentiment, which seems more useful for shorter texts such as this.
