@@ -1,0 +1,208 @@
+---
+title: "Data 606 - Lab 8"
+author: "Cameron Smith"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Main Exercises
+
+## Exercise 1
+
+*What are the dimensions of the dataset?*
+
+The 'hfi' dataset has 1,458 observations and 123 variables.
+
+```{r}
+library(tidyverse)
+library(openintro)
+library(statsr)
+
+data(hfi)
+```
+
+
+## Exercise 2
+
+*What type of plot would you use to display the relationship between the personal freedom score, pf_score, and one of the other numerical variables? Plot this relationship using the variable pf_expression_control as the predictor. Does the relationship look linear? If you knew a country’s pf_expression_control, or its score out of 10, with 0 being the most, of political pressures and controls on media content, would you be comfortable using a linear model to predict the personal freedom score?*
+
+A scatter plot can be used to quickly visualize the relationship (or lack thereof) between two variables, as follows.  Yes there appears to be a positive correlation between pf_expression control and pf_score.
+
+```{r}
+
+hfi %>%  ggplot(aes(x = pf_expression_control, y = pf_score)) +
+    geom_point()
+
+# Quantify the strength of the relationship w/ the correlation coefficient
+hfi %>%
+  summarise(cor(pf_expression_control, pf_score, use = "complete.obs"))
+```
+
+## Exercise 3
+
+*Looking at your plot from the previous exercise, describe the relationship between these two variables. Make sure to discuss the form, direction, and strength of the relationship as well as any unusual observations.*
+
+There is a strong upward linear trend (i.e. positive linear correlation) between the variables.
+
+```{r}
+newdf <- hfi %>% select(pf_expression_control, pf_score) %>% drop_na()
+
+plot_ss(x = pf_expression_control, y = pf_score, data = newdf)
+
+# Run again, but showing the squared residuals
+plot_ss(x = pf_expression_control, y = pf_score, data = newdf, showSquares = TRUE)
+```
+
+
+## Exercise 4
+
+*Using plot_ss, choose a line that does a good job of minimizing the sum of squares. Run the function several times. What was the smallest sum of squares that you got? How does it compare to your neighbors?*
+
+I ran the plot_ss code below 5 times with the below results - the smallest being 976.  My (virtual) neighbors had similar results.
+
+* 1154
+* 976
+* 989
+* 1040
+* 1090
+
+```{r}
+plot_ss(x = pf_expression_control, y = pf_score, data = newdf)
+```
+
+## Exercise 5
+
+*Fit a new model that uses pf_expression_control to predict hf_score, or the total human freedom score. Using the estimates from the R output, write the equation of the regression line. What does the slope tell us in the context of the relationship between human freedom and the amount of political pressure on media content?*
+
+Based on the output for the below model (m2), the equation of the regression line is as follows:
+
+\[
+  \hat{y} = 5.153687 + 0.349862 \times pf\_expression\_control
+\]
+
+The slope tells us that there is a positive correlation between the two variables.
+
+
+```{r}
+# Examples from paragraph above exercise
+m1 <- lm(pf_score ~ pf_expression_control, data = hfi)
+summary(m1)
+
+# New model with hf_score predicted from expression control
+m2 <- lm(hf_score ~ pf_expression_control, data = hfi)
+summary(m2)
+
+# Plot the data used for the new model
+hfi %>%  ggplot(aes(x = pf_expression_control, y = hf_score)) +
+    geom_point()
+
+```
+
+## Exercise 6
+
+*If someone saw the least squares regression line and not the actual data, how would they predict a country’s personal freedom school for one with a 6.7 rating for pf_expression_control? Is this an overestimate or an underestimate, and by how much? In other words, what is the residual for this prediction?*
+
+Based on 'eye balling' the data, I would predict a pf_score of just under 8.  This would in fact likely be an overestimate, as the majority of similar data points fall under that point of the regression line.  There would not actually be a residual for the prediction.  Residuals only apply to actual data points, indicating the space between the point and the line.  A prediction would be right on the line.
+
+```{r}
+# Examples fom paragraph above exercise
+ggplot(data = hfi, aes(x = pf_expression_control, y = pf_score)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = FALSE)
+
+
+```
+
+## Exercise 7
+
+*Is there any apparent pattern in the residuals plot? What does this indicate about the linearity of the relationship between the two variables?*
+
+The residuals plot seems to indicate linearity, as the data points (roughly) follow the line at y = 0.  As with the scatter plot above, the plot indicatives a positive linear relationship.
+
+```{r}
+ggplot(data = m1, aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+
+## Exercise 8
+
+**Based on the histogram and the normal probability plot, does the nearly normal residuals condition appear to be met?*
+
+Yes, the nearly normal residuals conditions appears to be met.  The normality plot ('QQ plot') in particular indicates a nearly normal distribution, with a very strong relationship between the sample values (residuals) and the theoretical values.  The histogram did not indicate anything useful with the default values (bin width of 25), but when I changed it to a lower value it also indicates a normal distribution.
+
+```{r}
+# Nearly normal residuals
+ggplot(data = m1, aes(x = .resid)) +
+  geom_histogram(binwidth = .9) +
+  xlab("Residuals")
+
+# Normality plot
+ggplot(data = m1, aes(sample = .resid)) +
+  stat_qq()
+```
+
+## Exercise 9
+
+*Based on the residuals vs. fitted plot, does the constant variability condition appear to be met?*
+
+Yes, it seems to although as tHe fitted values approach 8 or so a different pattern appears to be emerging.  However, constant variability seems to apply to the majority of the data.
+
+# More Practice
+
+## Additonal Example 1
+
+*Choose another freedom variable and a variable you think would strongly correlate with it.. Produce a scatterplot of the two variables and fit a linear model. At a glance, does there seem to be a linear relationship?*
+
+For the below example I chose pf_ss_homicide (Homicide) and ef_legal_police (Reliability of police), the general hypothesis being that the number of homicides will increase as the reliability of police decreases.  Based on the scatterplot it does look there is a linear relationship but it is difficult to tell whether it is linear.
+
+```{r}
+# Scatter plot
+hfi %>% ggplot(aes(x = pf_ss_homicide, y = ef_legal_police)) +
+  geom_point()
+
+```
+
+## Additional Example 2
+
+*How does this relationship compare to the relationship between pf_expression_control and pf_score? Use the R2 values from the two model summaries to compare. Does your independent variable seem to predict your dependent one better? Why or why not?*
+
+The r squared values from the pf_expression control vs pf_score model are: 0.5775, 0.5772 (adjusted)
+The r squared values from the pf_ss_homicide vs ef_legal_police model are: 0.2219, 0.2213 (adjusted)
+
+Based on the above the first model seems to have a much stronger correlation, as nearly 58% of the variability of explained by the independent variable versus only about 22% in the second model.
+
+```{r}
+# Model based on two new variables
+m3 <- lm(pf_ss_homicide ~ ef_legal_police, data = hfi)
+
+# View output / summary of model
+summary(m3)
+
+```
+
+## Additional Example 3
+
+*What’s one freedom relationship you were most surprised about and why? Display the model diagnostics for the regression model analyzing this relationship.*
+
+In addition to the model I mentioned above (murders vs reliability of police), which I found quite surprising, I found it interesting that there seems to be little if no relationship between ef_legal_integrity (Integrity of the legal system) and ef_government (Size of government), with an r squared of only 12.9.
+
+```{r}
+# Model based on two new variables
+m4 <- lm(ef_legal_integrity ~ ef_government, data = hfi)
+
+# View output / summary of model
+summary(m4)
+
+```
+
