@@ -1,0 +1,64 @@
+---
+title: "Data 607 - Week 11 Homework"
+author: "Cameron Smith"
+date: "11/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This assignment is focused on recommender systems.  Per the assignment's instructions, our task is to:
+
+* Identify a recommender system web site, then
+* Answer the three scenario design questions for this web site.  
+* Attempt to 'reverse engineer' the site
+
+The 3 scenario design questions are:
+
+1) Who are your target users?
+2) What are their key goals?
+3) How can you help them accopmlish those goals?
+
+## Site selection
+
+I decided to focus on Spotify for the assignment, as it is a service I subscribe to and find inteesting but it's also known as a "gold standard" in the data science / machine learning space, and who better to learn from than the best?
+
+## Scenario design questions
+
+**Who are your target users?**
+
+Target users in this case are people with internet access with an interest in listening to music - pretty much everybody, in other words.  
+
+**What are their key goals?**
+
+This is where it gets interesting.  The potential users (many millions, if not billions) can be grouped in a seemingly unlimited number of ways, each with their own unique goals tailored to their listening habits.  It could be teenagers wanting to stream the top pop songs, musicians wanting to practice 'tuning' their ear for tones, parents looking for music that helps calm their children down, college students looking for audiobooks to help them study, commuters interested in listening to podcasts, etc...
+
+**How can you help them accomplish those goals?**
+
+This can be done through custom playlists and radio staions tailored to each user's individual musical preferences.  This will require sophisticated, scalable and adaptable technology.
+
+## Reverse Engineering
+
+Spotify uses a combination of collaborative filtering, NLP, and audio modeling in their algorithm, and in particular for their "Discovery Weekly" playlists.  Although in 2020 this type of feature is 'just' a typical feature for music streaming services, it was very innovative when it was first introduced.  Every week each Spotify users were presented with a custom playlist based on their listening preferences that included a few songs they had likely heard before and forgotten about, a few from bands they listen to that have new content, and a few from bands they don't listen to but would like.  If my memory serves me correctly the playlist was refreshed every Monday, and I remember it being one of the only good things about Mondays.
+
+Spotify has since incorporated the algorithm into several other playlists, many refreshed daily ("Daily Mix 1", "Daily Mix 2", etc...) which tend to be more genre-focused.  It seems that the algorithm and technology behind it has become powerful enough to enable a shift from running once per week per user to something that can essentially be run at will, and is integrated into other features.
+
+Here is an article from medium.com that goes into some more detail:
+https://medium.com/datadriveninvestor/behind-spotify-recommendation-engine-a9b5a27a935
+
+Interestingly, in researching this assignment I discovered through an article on The Verge (citation below) that Spotify recently introduced an API that can be used by users to tailor and use Spotify's recommendation engine in custom apps.  The article includes a link to a public example that someone put together.  Though I will not get into detail here, I have linked to the article below in case anybody wants to play with it.
+
+https://www.theverge.com/tldr/2018/2/5/16974194/spotify-recommendation-algorithm-playlist-hack-nelson
+
+# Conclusion
+
+In conclusion Spotify has used a very innovative, adaptable and scalable approach that enables each of its users to have a 'radio station' tailored to their specific interests.
+
+
+
+
+
