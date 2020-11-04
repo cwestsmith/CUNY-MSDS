@@ -41,7 +41,7 @@ This is where it gets interesting.  The potential users (many millions, if not b
 
 This can be done through custom playlists and radio staions tailored to each user's individual musical preferences.  This will require sophisticated, scalable and adaptable technology.
 
-## Reverse Engineering
+## Reverse engineering
 
 Spotify uses a combination of collaborative filtering, NLP, and audio modeling in their algorithm, and in particular for their "Discovery Weekly" playlists.  Although in 2020 this type of feature is 'just' a typical feature for music streaming services, it was very innovative when it was first introduced.  Every week each Spotify users were presented with a custom playlist based on their listening preferences that included a few songs they had likely heard before and forgotten about, a few from bands they listen to that have new content, and a few from bands they don't listen to but would like.  If my memory serves me correctly the playlist was refreshed every Monday, and I remember it being one of the only good things about Mondays.
 
@@ -56,7 +56,7 @@ https://www.theverge.com/tldr/2018/2/5/16974194/spotify-recommendation-algorithm
 
 # Conclusion
 
-In conclusion Spotify has used a very innovative, adaptable and scalable approach that enables each of its users to have a 'radio station' tailored to their specific interests.
+In conclusion Spotify has used a very innovative, adaptable and scalable approach that enables each of its users to have a selection of music tailored to their specific interests.
 
 
 
