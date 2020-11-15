@@ -1,0 +1,220 @@
+---
+title: "Data 607 - Project 4"
+author: "Cameron Smith"
+date: "11/13/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Intro
+
+## Objective
+
+This assignment is focused on classification, and in particular classifying email messages as either 'spam' or 'ham' (i.e. not spam).  
+
+## Approach
+
+I approached the assignment via the following process:
+
+* Download and extract the spam/ham data from the internet
+* Import the data into R
+* Create a corpus
+* Clean up the data
+* Create a document-term matrix
+* Create predictive model (SVM)
+* Gauge the accuracy of the model
+* Improve the models and re-assess accuracy
+
+My original approach was based on a 'tidy' method, in particular using the tidytext package and following the steps we used previously in the sentiment analysis assignment.  I got as far as building the model but unfortunately had some trouble at that point.  From there I took a step back and started again using the tm and RTextTools packages as illustrated in the 'Automated  Data Collection With R' textbook.  I should note that I relied heavily on the examples in the book, in particular Chapter 10, and have adapted many of the examples and recommendations in that chapter to the context of this assignment.
+
+# Data and Preparation
+
+## Load required libraries
+
+```{r message=FALSE, include=FALSE}
+library(downloader)
+library(kableExtra)
+library(R.utils)
+library(tm)
+library(RTextTools)
+library(tidytext)
+library(SnowballC)
+library(tidyverse)
+
+```
+
+## Download and Automatically Extract Data
+
+For this assignment I used the data at the below link:
+
+https://spamassassin.apache.org/old/publiccorpus/
+
+The following code loads the spam and ham data from the internet, and then extracts the files into directories so that they can be imported and used as a corpus.
+
+```{r}
+# Check to see if the files already exist in the working directory.  If so then skip to the next section.
+# This enables the user to re-run the script without running into issues if the data has already been downloaded
+wd <- getwd()
+if(dir.exists(paste0(wd,"/easy_ham")) == FALSE) {
+  urlham <- "https://spamassassin.apache.org/old/publiccorpus/20021010_easy_ham.tar.bz2"
+  download(urlham, dest="hamdataset.bz2", mode="wb")
+  bunzip2("hamdataset.bz2")
+  untar("hamdataset")
+}
+
+if(dir.exists(paste0(wd,"/spam")) == FALSE) {
+  urlspam <- "https://spamassassin.apache.org/old/publiccorpus/20021010_spam.tar.bz2"
+  download(urlspam, dest="spamdataset.bz2", mode="wb") 
+  bunzip2("spamdataset.bz2")
+  untar("spamdataset")
+}
+
+```
+
+## Import the Data
+
+Now that the data has been downloaded and extracted, it can be imported into R for use as a corpus.
+
+```{r}
+# Create Volatile (in memory) Corpus for easy ham and spam data from tm package
+ham <- VCorpus(DirSource("easy_ham"))
+spam <- VCorpus(DirSource("spam"))
+```
+
+## Prepare and Clean the Data
+
+The two corpuses need to be prepared and cleaned for analysis.  The first steps are to add a meta tag to each that will specify them as "spam" or "ham", which will be used as the classifiers in the model below.
+
+```{r}
+# Add the spam / ham meta tags
+meta(ham, tag = "type") <- "ham"
+meta(spam, tag = "type") <- "spam"
+
+# Consolidate the spam and ham data into a single corpus
+hamandspam <- c(spam, ham)
+
+# Functions to clean up corpus data based on recommended tm_map functions in 10.2.3 of 'Automated Data Collection With 'R'
+hamandspam <- tm_map(hamandspam, content_transformer(function(x) iconv(x, "UTF-8", sub="byte")))
+hamandspam <- tm_map(hamandspam, removeNumbers)
+hamandspam <- tm_map(hamandspam, content_transformer(tolower))
+hamandspam <- tm_map(hamandspam, removePunctuation)
+hamandspam <- tm_map(hamandspam, removeWords, stopwords("english"))
+hamandspam <- tm_map(hamandspam, stemDocument)
+
+```
+
+## Create the Document Term Matrix (DTM)
+
+The next step is to create the document term matrix (DTM), which essentially tokenizes the words within the corpus and associates the frequency of each word with each document - in this case the 3,052 emails.  To illustrate the effect of sparsity, I created two separate DTMs - one based on all data and one with terms removed that are in 10 documents or less.
+
+After looking at the most common words in the DTM I noted that the top 60 mainly consisted of terms from the header and thus are irrelevant so I added them to a custom stop words list, ran the tm_map function again and recreated the DTM.  This should enable much more effective analysis and, hopefully, model accuracy.
+
+```{r}
+# Generate document-term matrix
+dtm_hamandspam <- DocumentTermMatrix(hamandspam)
+dtm_hamandspam
+
+# Remove sparse words and generate a new term-document matrix
+# Maximal term length has been reduced to 68
+dtm_hamandspam <- removeSparseTerms(dtm_hamandspam, 1-(10/length(hamandspam)))
+dtm_hamandspam
+
+# Visualize top 100 words
+top100 <- tidy(dtm_hamandspam) %>% 
+  group_by(term) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  top_n(100)
+
+# The first 60 or so of the most common words are technical terms from the header so let's get rid of them
+top100 <- unlist(top100)
+custom_stopwords <- c(stopwords("english"), top100)
+
+# Remove the stop words again, this time with the custom list
+hamandspam <- tm_map(hamandspam, removeWords, custom_stopwords)
+
+# Generate DTM again
+# The size of the DTM is nearly 1/3 smaller than before
+dtm_hamandspam <- DocumentTermMatrix(hamandspam)
+dtm_hamandspam
+
+# Analyze the top words again
+top25_new <- tidy(dtm_hamandspam) %>% 
+  group_by(term) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  top_n(25)
+
+# Now they seem much more relevant, with much lower counts
+kable(top25_new)
+
+```
+
+## Prepare Training and Testing Data
+
+The next step is to assemble a vector of the categories in the data, i.e. "spam" and "ham".  The book recommends using the prescindMeta function for this but I had no luck with this.  It seems that the function is no longer available.  I used a 1 line workaround that another student had used in the past and published on Rpubs at this link: https://api.rpubs.com/nschettini/378660.
+
+I used an 80/20 ratio for the training and test data.
+
+```{r}
+# Create matrix of meta data
+
+# This line is from another's work and is referenced above
+meta_type <- as.vector(unlist(meta(hamandspam)))
+
+# Creating variables for number of train/test rows in dataset based on 80/20 split
+N <- length(meta_type)
+train_row_end <- round(N * .8)
+test_row_start <- train_row_end + 1
+
+# Create container with specifying the training and testing data to use
+container <- create_container(dtm_hamandspam,
+                              labels = meta_type,
+                              trainSize = 1:train_row_end,
+                              testSize = test_row_start:N,
+                              virgin = F)
+
+# View the set of objects in the container, which will be used for ML estimation procedures
+slotNames(container)
+```
+
+# Models and Analysis
+
+## Build SVM
+
+For this exercise I built a Support Vector Machine (SVM) model, which is one of the most - if not *the* most popular classification model for text.
+
+```{r}
+# Create and try out the model
+svm_model <- train_model(container, "SVM")
+svm_out <- classify_model(container, svm_model)
+
+# View output from model
+head(svm_out)
+```
+
+## Gauge the Accuracy of the Model
+
+The model as can be seen below predicted the type of document, i.e. spam or ham, with 100% accuracy.  My gut feeling is that there is an issue with the way the test and training data was divided although I have been unable to pinpoint the issue thus far.
+
+```{r}
+# Create data frame with the results
+labels_out <- data.frame(
+  correct_label = meta_type[2443:N],
+  svm = as.character(svm_out[,1]),
+  stringsAsFactors = F)
+
+# SVM performance
+table(labels_out[,1] == labels_out[,2])
+
+```
+
+# Conclusion
+
+In conclusion using a combination of packages, and primarily the 'tm' and 'RTextTools' packages, we can build a corpus and classify text.  In this case my model as 100% accurate... or at least that is what it says.  Though it is tempting to accept this as very promising, it seems too good to be true and requires some further analysis / troubleshooting.  
