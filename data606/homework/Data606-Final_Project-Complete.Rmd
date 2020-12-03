@@ -1,0 +1,288 @@
+---
+title: "Data 606 Final Project"
+author: "Cameron Smith"
+date: "11/28/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: TRUE
+---
+
+```{r setup, message=FALSE}
+```
+
+# Introduction
+
+This is the final project for Data 606, the objective of which is to conduct a reproducible analysis of my own choosing.  I chose to use data focused on subjective happiness, as described in more detail below.
+
+## Research Question
+
+As someone about to enter the world of parenthood I thought it would be interesting to look at the potential relationship between having children and one's level of happiness.  The specific research question I had *planned on* asking is: *Is there a difference in levels of happiness between non-parents and parents?*  However, mid-way through my original analysis I realized that there were issues with the data which rendered it less useful so I re-framed the question as *Is there a difference in levels of life satisfaction betrween non-parents and parents?*
+
+**Null hypothesis:** There is no difference in average levels of life satisfaction between non-parents and parents  
+**Alternative hypothesis:** There is some difference in average levels of life satisfaction between non-parents and parents
+
+My focus was primarily on whether parents (i.e. people with at least one child) are on average more satisfied with their lives than non-parents.  I also looked at whether the answer varies depending on the number of children one has and/or the country they live in.
+
+## Overview of Data 
+
+The data is "Wave 7" from the World Values Survey (WSV), and the details - including a link to where the full data set can be downloaded, is below.  However, please note that the date used in this file is an extract I made from that original data set that only includes data for the variables relevant for this project.  The original file includes 536 separate variables.
+
+The dataset currently (the website notes that it is still a work in progress) spans 77 countries and includes 69,578 observations covering the years 2017 to 2020.
+
+**Citation:**
+
+WVS wave 7 (2017-2020):
+Haerpfer, C., Inglehart, R., Moreno, A., Welzel, C., Kizilova, K., Diez-Medrano J., M. Lagos,
+P. Norris, E. Ponarin & B. Puranen et al. (eds.). 2020. World Values Survey: Round Seven (2017 to 2020)
+Country-Pooled Datafile. Madrid, Spain & Vienna, Austria: JD Systems Institute & WVSA
+Secretariat [Version: http://www.worldvaluessurvey.org/WVSDocumentationWV7.jsp].
+
+## Method of Data Collection
+
+From the WVS Website "The main method of data collection in the WVS survey is face-to-face interview at respondent's home / place of residence. Other interview modes employed in WVS-7 include postal survey, self-administered online survey, and telephone interview (in combination with other surveying techniques)."
+
+## Dependent and Independent Variables
+
+* The dependent (response) variable is level of life satisfaction, which is technical a categorical (ordinal) variable with values ranging from 1 to 10 but per discussion with the professor will be treated as a quantitative variable for this project.
+* The main independent (explanatory) variable will be whether the respondent is a parent, which is a binary variable (is parent, or is not parent).
+* The secondary independent variable will be the country they live in, which is categorical (nominal).
+
+# Data Prep and Tidying
+
+The following sections are focused on obtaining and preparing the data for analysis.
+
+## Load Required Libraries
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(kableExtra)
+library(countrycode)
+```
+
+## Load the Data and Create a Data Frame
+
+```{r}
+# Load data from Github
+file = "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/wvsdata_606project.csv"
+df <- read.csv(file, header=TRUE)
+
+# Create data frame using with more readable column names and excluding the row number
+names(df) <- c("row_num", "country_code", "level_happiness", "life_satisfaction", "num_children")
+df <- df %>% select("country_code", "num_children", "life_satisfaction")
+```
+
+## Further Tidying of Data
+
+```{r message=FALSE}
+# Remove rows with NA values
+df_new <- na.omit(df)
+
+# Add a variable that matches the region to each country name
+df_new <- df_new %>% 
+  mutate(region = countrycode(sourcevar = df_new$country_code, origin = "iso3c", destination = "region"))
+
+# Check for NA values in the new column, which indicates 0 issues
+df_new %>% filter(is.na(region) == TRUE)
+```
+
+## Initial / Exploratory Analysis
+
+```{r message=FALSE}
+# How many levels of life satisfaction are in the dataset?
+df_new %>% group_by(life_satisfaction) %>% summarize("num_rows" = n())
+
+# Histogram of number of children
+hist(df_new$num_children, xlab = "Number of Children", main = "Histogram: Number of Children")
+
+# Mean of life satisfaction level for top 10 countries w/ mean number of children
+df_summarized <- df_new %>% group_by(country_code) %>% 
+  summarize("avg_life_satisfaction" = mean(life_satisfaction), "avg_num_children" = mean(num_children))
+top_n(arrange(df_summarized, desc(avg_life_satisfaction)), 10) 
+
+# Separate data for parents and non-parents
+parents_df <- df_new %>% filter(num_children > 0)
+nonparents_df <- df_new %>% filter(num_children == 0)
+```
+
+I then created box plots for each of the groups, but given that these are technical ordinal variables with the same range (and therefore the same median), these charts were not very helpful.
+
+```{r message=FALSE}
+# Boxplots of life satisfaction levels - parents vs non-parents
+boxplot(parents_df$life_satisfaction, nonparents_df$life_satisfaction, names = c("parents", "non-parents"), ylab = "Life Satisfaction", main = "Life Satisfaction (Parents vs Non-Parents)")
+
+parents_df %>% group_by(life_satisfaction) %>% summarise(num_observations = n())
+nonparents_df %>% group_by(life_satisfaction) %>% summarise(num_observations = n())
+```
+
+## Summary Statistics and Inference
+
+To determine whether there is a significant difference between the two population means (parents and non-parents), a T-test was used.
+
+As a first step, we need to evaluate the two Central Limit Conditions:
+
+* Independence, extended: The WVS website says 'All countries employed random probability representative samples of the adult population', so this condition is satisfied.
+* Normality: The sample size is significantly larger than 30 for each group, as detailed below, so assuming there are no clear outliers this condition is satisfied.
+
+To further check normality histograms were created for each group:
+
+```{r}
+# Histograms to check normality condition for both groups
+hist_nonparents <- ggplot(data=nonparents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
+hist_parents <- ggplot(data=parents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
+plot_grid(hist_nonparents,
+          hist_parents,
+          labels = c('Non-Parents','Parents'),
+          label_x = 0.2,
+          ncol = 2)
+
+# QQ plots to test normality of data for both groups
+qq_nonparents <- ggplot(nonparents_df, aes(sample = life_satisfaction)) +
+  stat_qq() +
+  stat_qq_line()
+
+# QQ plot to test normality of data for parents
+qq_parents <- ggplot(parents_df, aes(sample = life_satisfaction)) +
+  stat_qq() +
+  stat_qq_line()
+
+plot_grid(hist_nonparents,
+          hist_parents,
+          qq_nonparents,
+          qq_parents,
+          labels = c('Non-Parents','Parents'),
+          label_x = 0.2,
+          ncol = 2)
+```
+
+After confirming the conditions for inference have been met, summary statistics and a t-test can be performed.  The t-test was done manually and via an r function for illustrative purposes.
+
+```{r}
+# Find the means of each group
+nonparents_mean <- mean(parents_df$life_satisfaction)
+parents_mean <- mean(nonparents_df$life_satisfaction)
+difference_mean <- parents_mean - nonparents_mean
+
+# Find the standard deviation of each group
+nonparents_sd <- sd(parents_df$life_satisfaction)
+parents_sd <- sd(nonparents_df$life_satisfaction)
+
+# Find 'N' (number of observations) for each group
+nonparents_n <- nonparents_df %>% summarize(n()) %>% as.numeric()
+parents_n <- parents_df %>% summarize(n()) %>% as.numeric()
+
+# Degrees of freedom, take the smaller of the two observation counts and subtract 1
+degfreedom <- if_else(nonparents_n < parents_n, nonparents_n - 1, parents_n - 1)
+  
+# The means seem to be fairly similar, although non-parents are slightly higher
+# ...But is this difference statistically significant?
+cat("The mean level of life satisfaction for non-parents is", round(nonparents_mean,2),"\n")
+cat("The mean level of life satisfaction for parents is", round(parents_mean,2))
+
+# Calculate the standard error
+standard_error <- sqrt(
+  (nonparents_sd ^ 2 / nonparents_n) +
+    (parents_sd ^ 2 / parents_n)
+)
+
+# Calculate the t-statistic
+tstat_manual <- difference_mean / standard_error
+
+# Find the 95% confidence interval for the difference in means
+interval_low <- difference_mean - standard_error
+interval_high <- difference_mean + standard_error
+cat("The 95% Confidence Interval is between", round(interval_low, 3), "and", round(interval_high, 3))
+
+# The p-value is smaller than 0.05, so we reject the null hypothesis
+pvalue_manual <- 2*pt(-abs(tstat_manual), df=degfreedom)
+result <- if_else(pvalue_manual > 0.05, "fail to reject", "reject")
+cat("The p-value is", round(pvalue_manual,3), "so we", result, "the null hypothesis")
+```
+
+In addition to the manual t-test and confidence interval calculation above, the t.test function can be used to do the same thing.  I will perform a test via this method as well to confirm the findings are consistent (hopefully indicating that my manual calculations were correct).
+
+```{r}
+# Alternatively we can just use the built in t.test function
+autotest<- t.test(parents_df$life_satisfaction, nonparents_df$life_satisfaction)
+autotest
+```
+
+# Searching For (Better) Truth
+
+## Additional analysis
+
+With the disappointing results of the t-test, I performed some more analysis to see if perhaps there was a difference in regions.  To do this, I had to find a way to create a column that associated a global region with each country code.
+
+```{r message=FALSE}
+
+# Average life satisfaction by # of children
+avg_satisfaction_parents <-
+  parents_df %>% 
+  group_by(num_children) %>% 
+  summarize("num_rows" = n(), "avg_life_satisfaction" = mean(life_satisfaction))
+
+# Average levels of life satisfaction by region, descending
+avg_satisfaction_parents_region <- parents_df %>% 
+  group_by(region) %>% 
+  summarise(avg_life_satisfaction = mean(life_satisfaction))
+
+plot_avg <- ggplot(data=avg_satisfaction_parents, aes(x=num_children, y=avg_life_satisfaction)) +
+    geom_bar(stat="identity")
+plot_region <- ggplot(data=avg_satisfaction_parents_region, aes(x=region, y=avg_life_satisfaction)) +
+    geom_bar(stat="identity") + coord_flip()
+plot_grid(plot_avg,
+          plot_region,
+          labels = c('By # of Children','By Region'),
+          label_x = 0.2,
+          ncol = 2)
+
+
+
+# Interesting - it seems satisfaction is quite a bit better after 13 children - 14 to 15 seems to be 'ideal'
+nonparents_df %>% 
+  group_by(region) %>% 
+  summarise(avg_life_satisfaction = mean(life_satisfaction)) %>% 
+  arrange(desc(avg_life_satisfaction))
+
+# 
+```
+
+With the new insight from above in mind we can perform another t-test focused on comparing the group of parents with 14 or more children to non-parents
+
+```{r}
+parents_happy <- parents_df %>% filter(num_children >= 14)
+# Check normality assumption again, though technically satisfied with 31 observations.  Not very normal, though no outliers.
+ggplot(data=parents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1) + ggtitle("Histogram: Life satisfaction for parents w/ 14 or more children.  Normal?")
+
+```
+
+## Another t-test
+
+Another t-test (this time using the t-test function rather than manually) was performed against the filtered data set.  This time the results were different, with a p-value of greater than 0.5 and 0 falling within the confidence interval - thus the null hypothesis cannot be rejected.  In other words, there does not seem to be a statistically significant difference between the levels of life satisfaction for parents with 14 or more children and non-parents.
+
+```{r}
+# Run another t-test, this time focused using data for parents with 14 or more children
+t.test(parents_happy$life_satisfaction, nonparents_df$life_satisfaction)
+```
+
+## Smoke and Mirrors
+
+But what if we changed the approach a bit and use a one tailed t-test?  Surprise!  Based on this test, with a p value of under .05 we can reject say that parents with 14 or more children are on average more satisfied with their lives than non-parents.
+
+```{r}
+# One tailed test, the alternative now being that parents w/ 14 or more children have a greater 
+# level of life satisfaction than non-parents
+t.test(parents_happy$life_satisfaction, nonparents_df$life_satisfaction, alternative = "greater")
+```
+
+# Conclusion
+
+In conclusion, after performing a t-test the null hypothesis can be rejected in favor of the alternative hypothesis, which is that there is a difference in the levels of life satisfaction between non-parents and parents.  Somewhat surprisingly it seems the difference is negative, albeit small - with a 95% confidence interval of between -0.225 and -0.161.  However, hope for parents is not lost.
+
+The null hypothesis in fact holds true when focused on parents with 14 or more children.  In addition, if a one-sided t-test is used instead of a two-sided and the null hypothesis is correspondingly updated to "non-parents do not have a lower level of life satisfaction" then the null hypothesis can in fact be rejected in favor of the alternate hypothesis.  The real conclusion is therefore that parents are happier than non-parents, as long as they have at least 14 children.
+
+On a more serious note, this project has been an interesting experiment with data and has helped to illustrate the pitfalls of trying to use t-tests with ordinal variables as well as why one-tailed tests can sometimes be controversial.  When I did not like the results of my experiment I simply needed to change the rules of the game.
+
+
