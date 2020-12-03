@@ -126,17 +126,12 @@ As a first step, we need to evaluate the two Central Limit Conditions:
 * Independence, extended: The WVS website says 'All countries employed random probability representative samples of the adult population', so this condition is satisfied.
 * Normality: The sample size is significantly larger than 30 for each group, as detailed below, so assuming there are no clear outliers this condition is satisfied.
 
-To further check normality histograms were created for each group:
+To further check normality histograms and QQ plots were created for each group:
 
 ```{r}
 # Histograms to check normality condition for both groups
 hist_nonparents <- ggplot(data=nonparents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
 hist_parents <- ggplot(data=parents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
-plot_grid(hist_nonparents,
-          hist_parents,
-          labels = c('Non-Parents','Parents'),
-          label_x = 0.2,
-          ncol = 2)
 
 # QQ plots to test normality of data for both groups
 qq_nonparents <- ggplot(nonparents_df, aes(sample = life_satisfaction)) +
@@ -161,8 +156,8 @@ After confirming the conditions for inference have been met, summary statistics 
 
 ```{r}
 # Find the means of each group
-nonparents_mean <- mean(parents_df$life_satisfaction)
-parents_mean <- mean(nonparents_df$life_satisfaction)
+nonparents_mean <- mean(nonparents_df$life_satisfaction)
+parents_mean <- mean(parents_df$life_satisfaction)
 difference_mean <- parents_mean - nonparents_mean
 
 # Find the standard deviation of each group
@@ -175,11 +170,6 @@ parents_n <- parents_df %>% summarize(n()) %>% as.numeric()
 
 # Degrees of freedom, take the smaller of the two observation counts and subtract 1
 degfreedom <- if_else(nonparents_n < parents_n, nonparents_n - 1, parents_n - 1)
-  
-# The means seem to be fairly similar, although non-parents are slightly higher
-# ...But is this difference statistically significant?
-cat("The mean level of life satisfaction for non-parents is", round(nonparents_mean,2),"\n")
-cat("The mean level of life satisfaction for parents is", round(parents_mean,2))
 
 # Calculate the standard error
 standard_error <- sqrt(
@@ -193,12 +183,20 @@ tstat_manual <- difference_mean / standard_error
 # Find the 95% confidence interval for the difference in means
 interval_low <- difference_mean - standard_error
 interval_high <- difference_mean + standard_error
-cat("The 95% Confidence Interval is between", round(interval_low, 3), "and", round(interval_high, 3))
 
 # The p-value is smaller than 0.05, so we reject the null hypothesis
 pvalue_manual <- 2*pt(-abs(tstat_manual), df=degfreedom)
 result <- if_else(pvalue_manual > 0.05, "fail to reject", "reject")
-cat("The p-value is", round(pvalue_manual,3), "so we", result, "the null hypothesis")
+
+cat("Nonparents:", "\n Mean:",round(nonparents_mean,2), "\n Number of Observations (N):", nonparents_n, "\n Standard Deviation:", nonparents_sd, "\n\n")
+cat("Parents:", "\n Mean:",round(parents_mean,2), "\n Number of Observations (N):", parents_n, "\n Standard Deviation:", parents_sd, "\n\n")
+cat("Standard Error:", standard_error, "\nDegrees of Freedom:", degfreedom, "\n\n")
+cat("P-value:", pvalue_manual, "\nT-statistic:", tstat_manual, "\n95% Confidence Interval is between", round(interval_low, 3), "and", round(interval_high, 3), "\n\nThe p-value is", round(pvalue_manual,3), "so we", result, "the null hypothesis")
+```
+
+Results of manually performed t-test
+```{r}
+cat("P-value:", pvalue_manual, "\nT-statistic:", tstat_manual, "\n95% Confidence Interval is between", round(interval_low, 3), "and", round(interval_high, 3), "\nThe p-value is", round(pvalue_manual,3), "so we", result, "the null hypothesis")
 ```
 
 In addition to the manual t-test and confidence interval calculation above, the t.test function can be used to do the same thing.  I will perform a test via this method as well to confirm the findings are consistent (hopefully indicating that my manual calculations were correct).
@@ -209,52 +207,64 @@ autotest<- t.test(parents_df$life_satisfaction, nonparents_df$life_satisfaction)
 autotest
 ```
 
-# Searching For (Better) Truth
+# Searching For (Different) Truth
 
 ## Additional analysis
 
-With the disappointing results of the t-test, I performed some more analysis to see if perhaps there was a difference in regions.  To do this, I had to find a way to create a column that associated a global region with each country code.
+I performed some more analysis to see if perhaps there was a difference in regions, which there seems to be.
 
-```{r message=FALSE}
+The data seems to indicate that satisfaction is quite a bit better after 13 children.
 
-# Average life satisfaction by # of children
+```{r message=FALSE, warning=FALSE}
+
+# Average life satisfaction by # of children and number of rows
 avg_satisfaction_parents <-
   parents_df %>% 
   group_by(num_children) %>% 
   summarize("num_rows" = n(), "avg_life_satisfaction" = mean(life_satisfaction))
 
-# Average levels of life satisfaction by region, descending
+# Average levels of life satisfaction by region (descending) and number of rows
 avg_satisfaction_parents_region <- parents_df %>% 
   group_by(region) %>% 
   summarise(avg_life_satisfaction = mean(life_satisfaction))
-
+  
 plot_avg <- ggplot(data=avg_satisfaction_parents, aes(x=num_children, y=avg_life_satisfaction)) +
-    geom_bar(stat="identity")
+    geom_bar(stat="identity") +
+    xlab("Number of Children") + ylab("Avg. Life Satisfaction")
 plot_region <- ggplot(data=avg_satisfaction_parents_region, aes(x=region, y=avg_life_satisfaction)) +
-    geom_bar(stat="identity") + coord_flip()
+    geom_bar(stat="identity") + coord_flip() +
+    xlab("Region") + ylab("Avg. Life Satisfaction")
 plot_grid(plot_avg,
           plot_region,
-          labels = c('By # of Children','By Region'),
           label_x = 0.2,
           ncol = 2)
-
-
-
-# Interesting - it seems satisfaction is quite a bit better after 13 children - 14 to 15 seems to be 'ideal'
-nonparents_df %>% 
-  group_by(region) %>% 
-  summarise(avg_life_satisfaction = mean(life_satisfaction)) %>% 
-  arrange(desc(avg_life_satisfaction))
-
-# 
 ```
 
-With the new insight from above in mind we can perform another t-test focused on comparing the group of parents with 14 or more children to non-parents
+With the new insight from above in mind we can perform another t-test focused on comparing the group of parents with 14 or more children to non-parents.
 
 ```{r}
 parents_happy <- parents_df %>% filter(num_children >= 14)
+
+avg_satisfaction_happyparents <-
+  parents_happy %>% 
+  group_by(num_children) %>% 
+  summarize("num_rows" = n(), "avg_life_satisfaction" = mean(life_satisfaction))
+
 # Check normality assumption again, though technically satisfied with 31 observations.  Not very normal, though no outliers.
-ggplot(data=parents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1) + ggtitle("Histogram: Life satisfaction for parents w/ 14 or more children.  Normal?")
+plothappyhist <- ggplot(data=parents_happy, aes(life_satisfaction)) + 
+  geom_histogram(binwidth = 1) + 
+  ggtitle("Life Satisfaction: 14 or more children") +
+  xlab("Life Satisfaction") + ylab("Number of Observations")
+
+plotchildrencount <- ggplot(data=avg_satisfaction_happyparents, aes(x=num_children, y=num_rows)) +
+    geom_bar(stat="identity") +
+    ggtitle("# Observations") +
+    xlab("Number of Children") + ylab("Number of Observations")
+
+plot_grid(plothappyhist,
+          plotchildrencount,
+          label_x = 0.2,
+          ncol = 2)
 
 ```
 
@@ -279,10 +289,10 @@ t.test(parents_happy$life_satisfaction, nonparents_df$life_satisfaction, alterna
 
 # Conclusion
 
-In conclusion, after performing a t-test the null hypothesis can be rejected in favor of the alternative hypothesis, which is that there is a difference in the levels of life satisfaction between non-parents and parents.  Somewhat surprisingly it seems the difference is negative, albeit small - with a 95% confidence interval of between -0.225 and -0.161.  However, hope for parents is not lost.
+In conclusion, after performing a t-test the null hypothesis can be rejected in favor of the alternative hypothesis, which is that there is a difference in the levels of life satisfaction between non-parents and parents.  Encouragingly for parents to be it seems the difference is positive, with a 95% confidence interval of approximately 0.2 of a point on a 1 to 10 scale.
 
-The null hypothesis in fact holds true when focused on parents with 14 or more children.  In addition, if a one-sided t-test is used instead of a two-sided and the null hypothesis is correspondingly updated to "non-parents do not have a lower level of life satisfaction" then the null hypothesis can in fact be rejected in favor of the alternate hypothesis.  The real conclusion is therefore that parents are happier than non-parents, as long as they have at least 14 children.
+Although the mean level of life satisfaction of parents with 14 or more children is actually higher than the whole group, interestingly the null hypothesis holds true (no statistically significant difference).  Although there are 31 observations, I think this may be a flaw in the normality assumption.  If the same test is done but with a one tailed, 'greater than' test, the p-value decreases to less than 0.5 and thus a different result is reached.
 
-On a more serious note, this project has been an interesting experiment with data and has helped to illustrate the pitfalls of trying to use t-tests with ordinal variables as well as why one-tailed tests can sometimes be controversial.  When I did not like the results of my experiment I simply needed to change the rules of the game.
+This project has been an interesting experiment with data and has helped to illustrate the pitfalls of trying to use t-tests with ordinal variables as well as why one-tailed tests can sometimes be controversial.  When I did not like the results of my experiment I simply needed to change the rules of the game.  It would be interesting, and perhaps would have been a better choice all in all, to try ANOVA as well.
 
 

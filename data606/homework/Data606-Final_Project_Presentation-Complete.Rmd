@@ -1,0 +1,320 @@
+---
+title: "Data 606 Final Project"
+author: "Cameron Smith"
+date: "12/3/2020"
+output: 
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(kableExtra)
+library(countrycode)
+# Load data from Github
+file = "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/wvsdata_606project.csv"
+df <- read.csv(file, header=TRUE)
+
+# Create data frame using with more readable column names and excluding the row number
+names(df) <- c("row_num", "country_code", "level_happiness", "life_satisfaction", "num_children")
+df <- df %>% select("country_code", "num_children", "life_satisfaction")
+
+# Remove rows with NA values
+df_new <- na.omit(df)
+
+# Add a variable that matches the region to each country name
+df_new <- df_new %>% 
+  mutate(region = countrycode(sourcevar = df_new$country_code, origin = "iso3c", destination = "region"))
+
+# Check for NA values in the new column, which indicates 0 issues
+df_new %>% filter(is.na(region) == TRUE)
+```
+
+## Overview
+
+As someone about to enter the world of parenthood I thought it would be interesting to look at the potential relationship between having children and one's level of happiness.  The specific research question I had *planned on* asking is: 
+
+***Is there a difference in levels of happiness between non-parents and parents?***
+
+However, mid-way through my original analysis I realized that there were issues with the data which rendered it less useful so I re-framed the question as:
+
+***Is there a difference in levels of life satisfaction between non-parents and parents?***
+
+**Null hypothesis:** There is no difference in average levels of life satisfaction between non-parents and parents
+
+**Alternative hypothesis:** There is some difference in average levels of life satisfaction between non-parents and parents
+
+## Data / Data Collection
+
+The data is "Wave 7" from the World Values Survey (WSV), and the details - including a link to where the full data set can be downloaded, is below.  However, please note that the date used in this file is an extract I made from that original data set that only includes data for the variables relevant for this project.  The original file includes 536 separate variables.
+
+The dataset currently (the website notes that it is still a work in progress) spans 77 countries and includes 69,578 observations covering the years 2017 to 2020.
+
+**Citation:**
+
+WVS wave 7 (2017-2020): Haerpfer, C., Inglehart, R., Moreno, A., Welzel, C., Kizilova, K., Diez-Medrano J., M. Lagos, P. Norris, E. Ponarin & B. Puranen et al. (eds.). 2020. World Values Survey: Round Seven (2017 to 2020) Country-Pooled Datafile. Madrid, Spain & Vienna, Austria: JD Systems Institute & WVSA Secretariat [Version: http://www.worldvaluessurvey.org/WVSDocumentationWV7.jsp].
+
+## Key Variables 
+
+* The dependent (response) variable is level of life satisfaction, which is technical a categorical (ordinal) variable with values ranging from 1 to 10 but per discussion with the professor will be treated as a quantitative variable for this project.\
+* The main independent (explanatory) variable will be whether the respondent is a parent, which is a binary variable (is parent, or is not parent).\
+* The secondary independent variable will be the country they live in, which is categorical (nominal).\
+
+```{r}
+glimpse(df_new)
+```
+
+## Exploring the Data
+
+```{r message=FALSE, warning=FALSE}
+# How many levels of life satisfaction are in the dataset?
+df_new %>% group_by(life_satisfaction) %>% summarize("num_rows" = n()) %>% kable()
+
+```
+
+## Exploring the Data
+
+```{r message=FALSE, warning=FALSE}
+# Histogram of number of children
+hist(df_new$num_children, xlab = "Number of Children", main = "Histogram: Number of Children")
+```
+
+## Exploring the Data
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Mean of life satisfaction level for top 10 countries w/ mean number of children
+df_summarized <- df_new %>% group_by(country_code) %>% 
+  summarize("avg_life_satisfaction" = mean(life_satisfaction), "avg_num_children" = mean(num_children))
+```
+
+Summary by avg life satisfaction, descending
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+top_n(arrange(df_summarized, desc(avg_life_satisfaction)), 10)
+```
+
+## Exploring the Data
+
+Summary by avg num of children, descending
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+top_n(arrange(df_summarized, desc(avg_num_children)), 10)
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Separate data for parents and non-parents
+parents_df <- df_new %>% filter(num_children > 0)
+nonparents_df <- df_new %>% filter(num_children == 0)
+```
+
+## Exploring the Data
+
+Box Plots of little use based on ordinal variable, though differing IQRs are interesting
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Boxplots of life satisfaction levels - parents vs non-parents
+boxplot(parents_df$life_satisfaction, nonparents_df$life_satisfaction, names = c("parents", "non-parents"), ylab = "Life Satisfaction", main = "Life Satisfaction (Parents vs Non-Parents)")
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+parents_df %>% group_by(life_satisfaction) %>% summarise(num_observations = n())
+nonparents_df %>% group_by(life_satisfaction) %>% summarise(num_observations = n())
+```
+
+## Summary Statistics and Inference
+
+To determine whether there is a significant difference between the two population means (parents and non-parents), a T-test was used.
+
+As a first step, we need to evaluate the two Central Limit Conditions:
+
+* **Independence, extended:** The WVS website says 'All countries employed random probability representative samples of the adult population', so this condition is satisfied.
+
+* **Normality:** The sample size is significantly larger than 30 for each group, as detailed below, so assuming there are no clear outliers this condition is satisfied.
+
+## Summary Statistics and Inference
+
+To further check normality histograms and QQ plots were created for each group:
+
+```{r echo=FALSE}
+# Histograms to check normality condition for both groups
+hist_nonparents <- ggplot(data=nonparents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
+hist_parents <- ggplot(data=parents_df, aes(life_satisfaction)) + geom_histogram(binwidth = 1)
+
+# QQ plots to test normality of data for both groups
+qq_nonparents <- ggplot(nonparents_df, aes(sample = life_satisfaction)) +
+  stat_qq() +
+  stat_qq_line()
+
+# QQ plot to test normality of data for parents
+qq_parents <- ggplot(parents_df, aes(sample = life_satisfaction)) +
+  stat_qq() +
+  stat_qq_line()
+
+plot_grid(hist_nonparents,
+          hist_parents,
+          qq_nonparents,
+          qq_parents,
+          labels = c('Non-Parents','Parents'),
+          label_x = 0.2,
+          ncol = 2)
+```
+
+## Summary Statistics and Inference {.flexbox .vcenter}
+
+After confirming the conditions for inference have been met, summary statistics and a t-test can be performed.  The t-test was first done manually and then done again via an r function to compare / confirm results.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Find the means of each group
+nonparents_mean <- mean(nonparents_df$life_satisfaction)
+parents_mean <- mean(parents_df$life_satisfaction)
+difference_mean <- parents_mean - nonparents_mean
+
+# Find the standard deviation of each group
+nonparents_sd <- sd(parents_df$life_satisfaction)
+parents_sd <- sd(nonparents_df$life_satisfaction)
+
+# Find 'N' (number of observations) for each group
+nonparents_n <- nonparents_df %>% summarize(n()) %>% as.numeric()
+parents_n <- parents_df %>% summarize(n()) %>% as.numeric()
+
+# Degrees of freedom, take the smaller of the two observation counts and subtract 1
+degfreedom <- if_else(nonparents_n < parents_n, nonparents_n - 1, parents_n - 1)
+
+# Calculate the standard error
+standard_error <- sqrt(
+  (nonparents_sd ^ 2 / nonparents_n) +
+    (parents_sd ^ 2 / parents_n)
+)
+
+# Calculate the t-statistic
+tstat_manual <- difference_mean / standard_error
+
+# Find the 95% confidence interval for the difference in means
+interval_low <- difference_mean - standard_error
+interval_high <- difference_mean + standard_error
+
+# The p-value is smaller than 0.05, so we reject the null hypothesis
+pvalue_manual <- 2*pt(-abs(tstat_manual), df=degfreedom)
+result <- if_else(pvalue_manual > 0.05, "fail to reject", "reject")
+```
+
+```{r}
+# The means seem to be fairly similar, although non-parents are slightly higher
+# ...But is this difference statistically significant?
+cat("Nonparents:", "\n Mean:",round(nonparents_mean,2), "\n Number of Observations (N):", nonparents_n, "\n Standard Deviation:", nonparents_sd, "\n\n")
+cat("Parents:", "\n Mean:",round(parents_mean,2), "\n Number of Observations (N):", parents_n, "\n Standard Deviation:", parents_sd, "\n\n")
+cat("Standard Error:", standard_error, "\nDegrees of Freedom:", degfreedom)
+```
+
+Results of manually performed t-test
+```{r}
+cat("P-value:", pvalue_manual, "\nT-statistic:", tstat_manual, "\n95% Confidence Interval is between", round(interval_low, 3), "and", round(interval_high, 3), "\nThe p-value is", round(pvalue_manual,3), "so we", result, "the null hypothesis")
+```
+
+## Summary Statistics and Inference
+
+Same t-test but using built-in t.test function, which confirms the same result
+
+```{r echo=TRUE}
+autotest <- t.test(parents_df$life_satisfaction, nonparents_df$life_satisfaction)
+autotest
+```
+
+## Taking Another Look
+
+```{r include=FALSE}
+# Average life satisfaction by # of children
+avg_satisfaction_parents <-
+  parents_df %>% 
+  group_by(num_children) %>% 
+  summarize("num_rows" = n(), "avg_life_satisfaction" = mean(life_satisfaction))
+
+# Average levels of life satisfaction by region, descending
+avg_satisfaction_parents_region <- parents_df %>% 
+  group_by(region) %>% 
+  summarise(avg_life_satisfaction = mean(life_satisfaction))
+```
+
+I performed some more analysis to see if perhaps there was a difference in regions, which there seems to be.
+
+The data seems to indicate that satisfaction is quite a bit better after 13 children, and Latin America seems to be the highest scoring region.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot_avg <- ggplot(data=avg_satisfaction_parents, aes(x=num_children, y=avg_life_satisfaction)) +
+    geom_bar(stat="identity") +
+    xlab("Number of Children") + ylab("Avg. Life Satisfaction")
+plot_region <- ggplot(data=avg_satisfaction_parents_region, aes(x=region, y=avg_life_satisfaction)) +
+    geom_bar(stat="identity") + coord_flip() +
+    xlab("Region") + ylab("Avg. Life Satisfaction")
+plot_grid(plot_avg,
+          plot_region,
+          label_x = 0.2,
+          ncol = 2)
+```
+
+
+## Another T-Test: Is This Normal?
+Another normality check, this time for parents w/ 14+ children
+
+```{r include=FALSE}
+parents_happy <- parents_df %>% filter(num_children >= 14)
+
+avg_satisfaction_happyparents <-
+  parents_happy %>% 
+  group_by(num_children) %>% 
+  summarize("num_rows" = n(), "avg_life_satisfaction" = mean(life_satisfaction))
+
+# Check normality assumption again, though technically satisfied with 31 observations.  Not very normal.
+plothappyhist <- ggplot(data=parents_happy, aes(life_satisfaction)) + 
+  geom_histogram(binwidth = 1) + 
+  ggtitle("Life Satisfaction: 14 or more children") +
+  xlab("Life Satisfaction") + ylab("Number of Observations")
+
+plotchildrencount <- ggplot(data=avg_satisfaction_happyparents, aes(x=num_children, y=num_rows)) +
+    geom_bar(stat="identity") +
+    ggtitle("# Observations") +
+    xlab("Number of Children") + ylab("Number of Observations")
+```
+
+
+```{r echo=FALSE}
+plot_grid(plothappyhist,
+          plotchildrencount,
+          label_x = 0.2,
+          ncol = 2)
+```
+
+## Another T-Test
+
+Running another t-test, with the filtered group, yielded different results.  P is < 0.5 and thus the null hypothesis cannot be rejected.
+
+```{r echo=TRUE}
+# Run another t-test, this time focused using data for parents with 14 or more children
+t.test(parents_happy$life_satisfaction, nonparents_df$life_satisfaction)
+```
+
+## One Last Try
+What if we changed the approach a bit and use a one tailed t-test?  
+
+Surprise!  Based on this test, with a p value of under .05 we can reject the null hypothesis and say that parents with 14 or more children are on average more satisfied with their lives than non-parents.
+
+```{r}
+t.test(parents_happy$life_satisfaction, nonparents_df$life_satisfaction, alternative = "greater")
+```
+
+## Conclusion
+
+* There is a statistically significant difference in levels of life satisfaction between parents and non-parents
+* The difference appears to be positive
+* Ordinal variables are not ideal for quantitative analysis
+* One-tailed tests can be deceiving
+* ANOVA would perhaps have been a better test
+
+
+
