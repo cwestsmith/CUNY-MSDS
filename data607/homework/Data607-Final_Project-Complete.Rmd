@@ -1,0 +1,296 @@
+---
+title: "Data 607 - Final Project"
+author: "Cameron Smith"
+date: "12/4/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This project is focused on analyzing the relationship, if any, between quality of packaged ramen and where it is manufactured.  I will start by looking at where the best ramen is made based on the average review score for each country, expanding and comparing that analysis from country to regions and assessing via a T-test whether the differences are statistically significant.  
+
+From there I will look at whether there is a relationship between proximity to Japan and average review score.  To do this I will need to find the coordinates (latitude / longitude) for the location of each observation (i.e. country) and find a way to calculate distance between them, which will be a good opportunity to try some GIS-focused functions in R.
+
+Lastly, I will create a map to visualize the data.
+
+## Load Required Libraries
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(kableExtra)
+library(countrycode)
+library(cowplot)
+library(raster)
+library(CoordinateCleaner)
+library(mapproj)
+```
+
+## Load Data
+
+Load the dataset.  The data is from Kaggle but I am loading it from my personal Github account to maximize reproducibility.
+
+Formal citation for data set:
+Bilogur, A. (2018; January). Ramen Ratings, Version 1. Retrieved 22 November 2020 from https://www.kaggle.com/residentmario/ramen-ratings.
+
+```{r}
+# Load data from Github
+url <- "https://raw.githubusercontent.com/cwestsmith/cuny-msds/master/datasets/ramen-ratings.csv"
+rawdata <- read.csv(url, header=TRUE)
+
+# Quick look at the data to make sure everything loaded ok
+glimpse(rawdata)
+```
+
+# Prep, Tidy and Explore
+
+## Tidy and Transform
+
+The data appears to be pretty tidy but there is a bit of transformation to be done in order to maximize its usefulness.
+
+```{r message=FALSE, warning=FALSE}
+# Create variable to store tidy / prepped data
+tidydata <- rawdata
+
+# Change "Stars" column to numeric so that it can be used for quantitative analysis
+tidydata$Stars <- as.numeric(tidydata$Stars)
+
+# Find NA values, which shows there are 3 rows.
+tidydata %>% filter(is.na(Stars) == TRUE)
+
+# Remove the NA values
+tidydata <- tidydata %>% drop_na(Stars)
+
+# Check again for NA values, which confirms the 3 rows have been removed.
+tidydata %>% filter(is.na(Stars) == TRUE)
+
+# Add and calculate a variable for the region of each country
+tidydata <- tidydata %>% 
+  mutate(Region = countrycode(sourcevar = tidydata$Country, origin = "country.name", destination = "region"))
+                     
+# Check for NA values in the new column, which indicates issues for Sarawak, Holland and Dubai
+tidydata %>% filter(is.na(Region) == TRUE)
+
+# Update the mismatching country names accordingly
+tidydata$Country <- gsub("Sarawak", "Malaysia", tidydata$Country, perl=TRUE)
+tidydata$Country <- gsub("Holland", "Netherlands", tidydata$Country, perl=TRUE)
+tidydata$Country <- gsub("Dubai", "United Arab Emirates", tidydata$Country, perl=TRUE)
+
+# Also update other countries with name issues
+tidydata$Country <- gsub("United\\sStates", "USA", tidydata$Country, perl=TRUE)
+
+# Recalculate the region values using the updated country names
+tidydata <- tidydata %>% 
+  mutate(Region = countrycode(sourcevar = tidydata$Country, origin = "country.name", destination = "region"))
+                    
+```
+
+## Explore the Data
+
+Start with a quick look at various dimensions of the data to become familiar with it and see if anything stands out.
+
+```{r message=FALSE, warning=FALSE}
+# Summarise data per region, which indicates there are 7 different regions covered in the data set.
+region_summary <- tidydata %>% dplyr::select(Region, Stars) %>% group_by(Region) %>% summarise(avg_stars = mean(Stars), num_rows = n())
+region_summary
+ungroup(region_summary)
+
+# Sort by highest-scoring top 10 countries
+country_summary <- tidydata %>% dplyr::select(Country, Stars) %>% group_by(Country) %>% summarise(avg_stars = mean(Stars), num_rows = n())
+country_summary %>% arrange(desc(avg_stars)) %>%
+  top_n(20)
+
+# Histogram with mean line
+p1 <- ggplot(tidydata, aes(Stars)) +
+  geom_histogram(bins = 20, fill = "white", color = "black")  +
+  geom_vline(aes(xintercept = mean(Stars)), linetype = 2) +
+  xlab("Stars Ranking") + ylab("# of Observations")
+p1
+
+# Histogram grouped by region
+p2 <- ggplot(tidydata, aes(Stars)) +
+  geom_histogram(aes(fill = Region, color = Region), bins = 20,
+                position = "identity", alpha = 0.5) +
+  scale_fill_viridis_d() +
+  scale_color_viridis_d() +
+  xlab("Stars Ranking") + ylab("# of Observations")
+p2
+
+# Box Plots grouped by region
+p3 <- ggplot(tidydata, aes(x=Region, y=Stars)) + 
+  geom_boxplot() +
+  coord_flip() +
+  xlab("Region") + ylab("# of Stars")
+p3
+
+```
+
+East Asia & Pacific has the highest average score, but is the difference statistically significant?
+
+# Statistical Analysis
+
+To assess whether the difference in means is actually significant a T-test and and an ANOVA analysis will be done
+
+## Summary Statistics
+
+```{r}
+# First separate the data into groups
+eap_only <- tidydata %>% filter(Region == "East Asia & Pacific")
+eap_excluded <- tidydata %>% filter(Region != "East Asia & Pacific")
+
+# View summary statistics
+summary(eap_only$Stars)
+summary(eap_excluded$Stars)
+
+```
+
+## T-test
+
+First analysis: using a one-sided T-test, is there a statistically significant difference?
+
+**Null hypothesis:** The average reviews for "East Asia & Pacific" region are not higher than those from the rest of the world
+**Alternative hypothesis:** The average reviews for "East Asia & Pacific" region are higher than those from the rest of the world
+
+Conditions for Inference:
+
+* Independence, Extended: Assumed yes for this exercise, though not much is actually known re: the method of data collection
+* Normality: With N of over 30 normality is assumed, though the box plots above and QQ Plots below do indicate some potential outliers
+
+```{r}
+# Histograms to check normality condition for both groups
+p4 <- ggplot(data=eap_excluded, aes(Stars)) + geom_histogram(binwidth = .5) +
+  ggtitle("EAP Excluded")
+p5 <- ggplot(data=eap_only, aes(Stars)) + geom_histogram(binwidth = .5) +
+  ggtitle("EAP Only")
+
+# QQ plots to test normality of data for both groups
+p6 <- ggplot(eap_excluded, aes(sample = Stars)) +
+  stat_qq() +
+  stat_qq_line()
+
+p7 <- ggplot(eap_only, aes(sample = Stars)) +
+  stat_qq() +
+  stat_qq_line()
+
+plot_grid(p4,
+          p5,
+          p6,
+          p7,
+          label_x = 0.2,
+          ncol = 2)
+```
+
+Perform the T-test
+
+```{r}
+t.test(eap_only$Stars, eap_excluded$Stars, alternative = "greater")
+```
+
+The p-value is 0, indicating based on a significant level of .05 (95% confidence) that the null hypothesis can be rejected in favor of the alternative hypothesis.  
+
+Ramen from EAP, based on this data, has a higher star rating (i.e. it subjectively 'better') than ramen from other regions.
+
+So within the EAP region, where is the 'best of the best'?  Cambodia, Malaysia, and Singapore, it seems.
+
+```{r message=FALSE, warning=FALSE}
+eap_only_avg <- eap_only %>% dplyr::select(Variety, Country, Stars) %>% group_by(Country) %>% summarise(avg_stars = mean(Stars), num_rows = n())
+
+eap_only_avg %>% ggplot(aes(x = reorder(Country, avg_stars), y = avg_stars)) +
+    geom_bar(stat="identity") +
+    coord_flip() +
+  xlab("Country") + ylab("Average # of Stars") +
+  ggtitle("Ranking of Avg. Reviews in East Asia & Pacific Region")
+
+```
+
+## Correlation: Proximity from Japan
+
+Next let's look at whether there is a correlation between average stars and the country's proximity from Japan, which is often considered ramen's 'home' (though interestingly I read it is actually from China originally).
+
+First we need to add a column with the latitude and longitude.  From there distances can be calculated and compared.
+
+```{r}
+# First have a look at countryref to see what is in there
+glimpse(countryref)
+
+# Create new data frame with needed columns
+country_geoinfo <- countryref %>% dplyr::select(name, centroid.lon, centroid.lat)
+# Rename the country name column so that the join will work
+colnames(country_geoinfo)[1] = "Country"
+
+# There are multiple rows with different geolocations.  Need to get rid of duplicates for join
+temp <- ""
+newgeoinfo <- data.frame(Country = character(), longitude = numeric(), latitude = numeric())
+counter <- 0
+rowcounter <- 0
+
+for (i in 1:nrow(country_geoinfo)) {
+  counter <- counter + 1
+  ifelse(counter == 1, temp <- country_geoinfo[counter,1], temp <- country_geoinfo[counter-1,1])
+  ifelse(country_geoinfo[counter, 1] == temp, discard <- 1, newgeoinfo[counter,] <- country_geoinfo[counter,])
+}
+
+# Update the names of countries that do not match our original data frame
+newgeoinfo$Country <- gsub("Hong\\sKong\\sSAR\\sChina", "Hong Kong", newgeoinfo$Country, perl=TRUE)
+newgeoinfo$Country <- gsub("United\\sStates", "USA", newgeoinfo$Country, perl=TRUE)
+newgeoinfo$Country <- gsub("Myanmar\\s\\(Burma\\)", "Myanmar", newgeoinfo$Country, perl=TRUE)
+newgeoinfo$Country <- gsub("United Kingdom", "UK", newgeoinfo$Country, perl=TRUE)
+
+# Use new data frame with one row per country for a join to add longitude / latitude to original data frame
+country_summary <- left_join(country_summary, newgeoinfo, by = "Country")
+
+# Find and store coordinates for Japan
+japancoords <- country_summary %>% filter(Country == "Japan") %>% dplyr::select(longitude, latitude)
+country_summary$distance_japan <- as.numeric("")
+
+counter2 <- 0
+for (j in 1:nrow(country_summary)) {
+  counter2 <- counter2 + 1
+  country_summary$distance_japan[counter2] <- pointDistance(c(country_summary$longitude[counter2],country_summary$latitude[counter2]), japancoords, lonlat = TRUE)
+}
+
+# Is there a correlation between score and distance to Japan?  It seems not.
+cor.test(country_summary$avg_stars, country_summary$distance_japan, method = "pearson")
+
+```
+
+With a p-value of over .05 it seems the correlation, if any, if not significant.
+
+## Map of Data
+
+To finish, here is a map showing the average ramen review scores per country.
+
+```{r message=FALSE, warning=FALSE}
+WorldData <- map_data('world') %>% filter(region != "Antarctica") %>% fortify
+
+df <- data.frame(region=country_summary$Country, 
+                 value=country_summary$avg_stars, 
+                 stringsAsFactors=FALSE)
+
+p <- ggplot() +
+    geom_map(data = WorldData, map = WorldData,
+                  aes(x = long, y = lat, group = group, map_id=region),
+                  fill = "white", colour = "#7f7f7f", size=0.5) + 
+    geom_map(data = df, map=WorldData,
+                  aes(fill=value, map_id=region),
+                  colour="#7f7f7f", size=0.5) +
+    coord_map("rectangular", lat0=0, xlim=c(-180,180), ylim=c(-60, 90)) +
+    scale_fill_continuous(low="lightgrey", high="darkblue", guide="colorbar") +
+    scale_y_continuous(breaks=c()) +
+    scale_x_continuous(breaks=c()) +
+    labs(fill="Avg. Stars Rating", title="Average Ramen Review Score (Stars Rating) Per Country", x="", y="") +
+    theme_bw()
+p 
+```
+
+# Conclusion
+
+Not very surprisingly given its origins, the 'best' ramen seems to come from the East Asia & Pacific Region.  Using a t-test the difference in means (EAP region versus rest of the world) can be inferred beyond the sample.  That being said, this dataset was more focused on fun than science, and I would be reluctant to use this analysis beyond the scope of the project due mainly to the unknowns regarding independence of the sample.
+
+Somewhat surprisingly to me, the 'best' packaged ramen is not from Japan.  In fact, Japan barely makes the top 5.  Not as surprisingly - but somewhat interestingly - there does not seem to be a correlation between proximity to Japan and quality of ramen.
